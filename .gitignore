@@ -1,0 +1,40 @@
+# Arquivo .gitignore para o projeto de Forecasting
+
+# Ignorar o ambiente virtual Python
+.venv/
+
+# Ignorar caches e arquivos compilados do Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Ignorar pastas de IDEs e editores de código
+.vscode/
+.idea/
+*.swp
+
+# Ignorar arquivos de sistema operacional (macOS, Windows)
+.DS_Store
+Thumbs.db
+
+# --- Arquivos específicos do nosso projeto ---
+
+# Ignorar todos os dados brutos e processados
+# Geralmente não versionamos dados, apenas o código que os processa
+data/
+
+# Ignorar todos os resultados gerados pela pipeline
+# (modelos, previsões, métricas e relatórios)
+results/
+models/
+
+# Ignorar arquivos de ambiente que podem conter segredos
+.env
+
+# Ignorar logs do Docker Compose (se aplicável)
+logs/
+lightning_logs/
+
+# Ignorar arquivos gerados por scripts de shell
+*.log
