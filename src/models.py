@@ -1,16 +1,15 @@
-# /forecasting/src/models.py (VERSÃO COM NOMENCLATURA PADRONIZADA)
+# /forecasting/src/models.py (VERSÃO COM HÍBRIDO LSTM REINTRODUZIDO)
 import pandas as pd
 import pmdarima as pm
 import joblib
 from pathlib import Path
 import numpy as np
-from statsmodels.tsa.api import VAR
 from neuralforecast import NeuralForecast
 from neuralforecast.models import NBEATS, LSTM
 from neuralforecast.losses.pytorch import MAE
 
+# --- Funções Auxiliares (sem alterações) ---
 def save_forecasts(df, forecast_dir, model_name, dataset_name):
-    # (Esta função não muda)
     output_path = Path(forecast_dir)
     csv_path_dir = output_path / "csv"; csv_path_dir.mkdir(parents=True, exist_ok=True)
     pkl_path_dir = output_path / "pkl"; pkl_path_dir.mkdir(parents=True, exist_ok=True)
@@ -20,15 +19,13 @@ def save_forecasts(df, forecast_dir, model_name, dataset_name):
     return str(csv_path)
 
 def prepare_nbeats_df(df_time, y_series, unique_id, ds_column='ds'):
-    # (Esta função não muda)
     return pd.DataFrame({'ds': df_time[ds_column], 'y': y_series.astype('float32'), 'unique_id': unique_id})
 
 def create_standard_forecast_df(test_df, forecast_values, dataset_name, target_column, ds_column='ds'):
-    # (Esta função não muda)
     return pd.DataFrame({'unique_id': dataset_name, 'ds': test_df[ds_column].values, 'actual': test_df[target_column].values, 'forecast': forecast_values})
 
+# --- Modelos Puros (Baselines) ---
 def train_and_forecast_arima(train_path, test_path, model_dir, forecast_dir, dataset_name, seasonality):
-    # (Esta função não muda)
     train_df, test_df = pd.read_csv(train_path, parse_dates=['ds']), pd.read_csv(test_path, parse_dates=['ds'])
     target_column = 'passengers'
     model = pm.auto_arima(train_df[target_column], m=seasonality, seasonal=True, trace=False, suppress_warnings=True, error_action='ignore')
@@ -36,23 +33,87 @@ def train_and_forecast_arima(train_path, test_path, model_dir, forecast_dir, dat
     df_out = create_standard_forecast_df(test_df, forecasts, dataset_name, target_column)
     return save_forecasts(df_out, forecast_dir, "ARIMA", dataset_name)
 
-def train_and_forecast_nbeats(train_path, test_path, model_dir, forecast_dir, dataset_name, seasonality, max_steps):
-    # (Esta função não muda)
+def train_and_forecast_nbeats_direct(train_path, test_path, model_dir, forecast_dir, dataset_name, seasonality, max_steps):
     train_df, test_df = pd.read_csv(train_path, parse_dates=['ds']), pd.read_csv(test_path, parse_dates=['ds'])
-    horizon, target_column = len(test_df), 'passengers'
-    freq = 'ME'
+    horizon, target_column, freq = len(test_df), 'passengers', 'ME'
+    all_forecasts = []
+    for h in range(1, horizon + 1):
+        target_series = train_df[target_column].shift(-h).dropna()
+        train_df_h = train_df.iloc[:len(target_series)]
+        train_df_fmt_h = prepare_nbeats_df(train_df_h, target_series, f'{dataset_name}_h{h}')
+        models = [NBEATS(input_size=2 * horizon, h=1, loss=MAE(), max_steps=max_steps, random_seed=42, stack_types=['identity'])]
+        nf = NeuralForecast(models=models, freq=freq)
+        nf.fit(df=train_df_fmt_h)
+        forecast_h = nf.predict()['NBEATS'].values[0]
+        all_forecasts.append(forecast_h)
+    forecasts = np.array(all_forecasts)
+    df_out = create_standard_forecast_df(test_df, forecasts, dataset_name, target_column)
+    return save_forecasts(df_out, forecast_dir, "NBEATS_Direct", dataset_name)
+
+def train_and_forecast_nbeats_mimo(train_path, test_path, model_dir, forecast_dir, dataset_name, seasonality, max_steps):
+    train_df, test_df = pd.read_csv(train_path, parse_dates=['ds']), pd.read_csv(test_path, parse_dates=['ds'])
+    horizon, target_column, freq = len(test_df), 'passengers', 'ME'
     train_df_fmt = prepare_nbeats_df(train_df, train_df[target_column], dataset_name)
     models = [NBEATS(input_size=2 * horizon, h=horizon, loss=MAE(), max_steps=max_steps, random_seed=42)]
     nf = NeuralForecast(models=models, freq=freq)
     nf.fit(df=train_df_fmt)
     forecasts_df_raw = nf.predict()
     df_out = create_standard_forecast_df(test_df, forecasts_df_raw['NBEATS'].values, dataset_name, target_column)
-    return save_forecasts(df_out, forecast_dir, "NBEATS", dataset_name)
+    return save_forecasts(df_out, forecast_dir, "NBEATS_MIMO", dataset_name)
 
-def train_and_forecast_hybrid_recursive_direct(train_path, test_path, model_dir, forecast_dir, dataset_name, seasonality, max_steps):
+def train_and_forecast_lstm_direct(train_path, test_path, model_dir, forecast_dir, dataset_name, seasonality, max_steps):
     train_df, test_df = pd.read_csv(train_path, parse_dates=['ds']), pd.read_csv(test_path, parse_dates=['ds'])
-    horizon, target_column = len(test_df), 'passengers'
-    freq = 'ME'
+    horizon, target_column, freq = len(test_df), 'passengers', 'ME'
+    all_forecasts = []
+    for h in range(1, horizon + 1):
+        target_series = train_df[target_column].shift(-h).dropna()
+        train_df_h = train_df.iloc[:len(target_series)]
+        train_df_fmt_h = prepare_nbeats_df(train_df_h, target_series, f'{dataset_name}_h{h}')
+        models = [LSTM(input_size=2 * horizon, h=1, loss=MAE(), max_steps=max_steps, random_seed=42)]
+        nf = NeuralForecast(models=models, freq=freq)
+        nf.fit(df=train_df_fmt_h)
+        forecast_h = nf.predict()['LSTM'].values[0]
+        all_forecasts.append(forecast_h)
+    forecasts = np.array(all_forecasts)
+    df_out = create_standard_forecast_df(test_df, forecasts, dataset_name, target_column)
+    return save_forecasts(df_out, forecast_dir, "LSTM_Direct", dataset_name)
+
+def train_and_forecast_lstm_mimo(train_path, test_path, model_dir, forecast_dir, dataset_name, seasonality, max_steps):
+    train_df, test_df = pd.read_csv(train_path, parse_dates=['ds']), pd.read_csv(test_path, parse_dates=['ds'])
+    horizon, target_column, freq = len(test_df), 'passengers', 'ME'
+    train_df_fmt = prepare_nbeats_df(train_df, train_df[target_column], dataset_name)
+    models = [LSTM(input_size=2 * horizon, h=horizon, loss=MAE(), max_steps=max_steps, random_seed=42)]
+    nf = NeuralForecast(models=models, freq=freq)
+    nf.fit(df=train_df_fmt)
+    forecasts_df_raw = nf.predict()
+    df_out = create_standard_forecast_df(test_df, forecasts_df_raw['LSTM'].values, dataset_name, target_column)
+    return save_forecasts(df_out, forecast_dir, "LSTM_MIMO", dataset_name)
+
+# --- Modelos Híbridos ---
+def train_and_forecast_hybrid_direct_nbeats(train_path, test_path, model_dir, forecast_dir, dataset_name, seasonality, max_steps):
+    train_df, test_df = pd.read_csv(train_path, parse_dates=['ds']), pd.read_csv(test_path, parse_dates=['ds'])
+    horizon, target_column, freq = len(test_df), 'passengers', 'ME'
+    arima_model = pm.auto_arima(train_df[target_column], m=seasonality, seasonal=True, trace=False, suppress_warnings=True, error_action='ignore')
+    arima_forecasts = arima_model.predict(n_periods=horizon)
+    residuals_train = pd.Series(arima_model.resid()).astype('float32')
+    all_residuals_forecasts = []
+    for h in range(1, horizon + 1):
+        target_residuals = residuals_train.shift(-h).dropna()
+        train_df_h = train_df.iloc[:len(target_residuals)]
+        residuals_train_df_fmt_h = prepare_nbeats_df(train_df_h, target_residuals, f'{dataset_name}_residuals_h{h}')
+        nbeats_residuals_model = [NBEATS(input_size=2 * horizon, h=1, loss=MAE(), max_steps=max_steps, random_seed=42, stack_types=['identity'])]
+        nf_residuals = NeuralForecast(models=nbeats_residuals_model, freq=freq)
+        nf_residuals.fit(df=residuals_train_df_fmt_h)
+        forecast_h = nf_residuals.predict()['NBEATS'].values[0]
+        all_residuals_forecasts.append(forecast_h)
+    residuals_forecasts = np.array(all_residuals_forecasts)
+    final_forecast = arima_forecasts + residuals_forecasts
+    df_out = create_standard_forecast_df(test_df, final_forecast, dataset_name, target_column)
+    return save_forecasts(df_out, forecast_dir, "Hybrid_Direct_N-BEATS", dataset_name)
+
+def train_and_forecast_hybrid_mimo_nbeats(train_path, test_path, model_dir, forecast_dir, dataset_name, seasonality, max_steps):
+    train_df, test_df = pd.read_csv(train_path, parse_dates=['ds']), pd.read_csv(test_path, parse_dates=['ds'])
+    horizon, target_column, freq = len(test_df), 'passengers', 'ME'
     arima_model = pm.auto_arima(train_df[target_column], m=seasonality, seasonal=True, trace=False, suppress_warnings=True, error_action='ignore')
     arima_forecasts = arima_model.predict(n_periods=horizon)
     residuals_train = pd.Series(arima_model.resid()).astype('float32')
@@ -63,45 +124,27 @@ def train_and_forecast_hybrid_recursive_direct(train_path, test_path, model_dir,
     residuals_forecasts = nf_residuals.predict()['NBEATS'].values
     final_forecast = arima_forecasts + residuals_forecasts
     df_out = create_standard_forecast_df(test_df, final_forecast, dataset_name, target_column)
-    # --- MUDANÇA AQUI: Aplicando a nova nomenclatura ---
-    return save_forecasts(df_out, forecast_dir, "Hybrid_Direct_N-BEATS", dataset_name)
+    return save_forecasts(df_out, forecast_dir, "Hybrid_MIMO_N-BEATS", dataset_name)
 
-def train_and_forecast_hybrid_arima_lstm(train_path, test_path, model_dir, forecast_dir, dataset_name, seasonality, max_steps):
+# --- FUNÇÃO HÍBRIDA ARIMA-LSTM REINSERIDA ---
+def train_and_forecast_hybrid_recursive_lstm(train_path, test_path, model_dir, forecast_dir, dataset_name, seasonality, max_steps):
+    """Implementa o híbrido ARIMA (Recursivo) + LSTM (MIMO nos resíduos)."""
     train_df, test_df = pd.read_csv(train_path, parse_dates=['ds']), pd.read_csv(test_path, parse_dates=['ds'])
-    horizon, target_column = len(test_df), 'passengers'
-    freq = 'ME'
+    horizon, target_column, freq = len(test_df), 'passengers', 'ME'
+    
+    # Componente Linear: ARIMA Recursivo
     arima_model = pm.auto_arima(train_df[target_column], m=seasonality, seasonal=True, trace=False, suppress_warnings=True, error_action='ignore')
     arima_forecasts = arima_model.predict(n_periods=horizon)
     residuals_train = pd.Series(arima_model.resid()).astype('float32')
+
+    # Componente Não-Linear: LSTM (por padrão, é MIMO quando h > 1) nos Resíduos
     residuals_train_df_fmt = prepare_nbeats_df(train_df.iloc[:len(residuals_train)], residuals_train, f'{dataset_name}_residuals')
     lstm_residuals_model = [LSTM(input_size=2 * horizon, h=horizon, loss=MAE(), max_steps=max_steps, random_seed=42)]
     nf_residuals = NeuralForecast(models=lstm_residuals_model, freq=freq)
     nf_residuals.fit(df=residuals_train_df_fmt)
     residuals_forecasts = nf_residuals.predict()['LSTM'].values
+
+    # Combinação
     final_forecast = arima_forecasts + residuals_forecasts
     df_out = create_standard_forecast_df(test_df, final_forecast, dataset_name, target_column)
-    # --- MUDANÇA AQUI: Aplicando a nova nomenclatura ---
     return save_forecasts(df_out, forecast_dir, "Hybrid_Recursive_LSTM", dataset_name)
-
-def train_and_forecast_hybrid_mimo(train_path, test_path, model_dir, forecast_dir, dataset_name, seasonality, max_steps):
-    train_df, test_df = pd.read_csv(train_path, parse_dates=['ds']), pd.read_csv(test_path, parse_dates=['ds'])
-    horizon, target_column = len(test_df), 'passengers'
-    freq = 'ME'
-    train_df_var = train_df[[target_column]].copy()
-    train_df_var[f'{target_column}_lag1'] = train_df_var[target_column].shift(1)
-    train_df_var = train_df_var.dropna()
-    var_model = VAR(train_df_var)
-    var_results = var_model.fit(seasonality)
-    lag_order = var_results.k_ar
-    var_forecasts = var_results.forecast(y=train_df_var.values[-lag_order:], steps=horizon)[:, 0]
-    var_train_preds = var_results.fittedvalues[target_column]
-    residuals_train = (train_df_var[target_column].iloc[lag_order:] - var_train_preds).astype('float32')
-    residuals_train_df_fmt = prepare_nbeats_df(train_df.iloc[1:][lag_order:], residuals_train, f'{dataset_name}_residuals')
-    nbeats_residuals_model = [NBEATS(input_size=2 * horizon, h=horizon, loss=MAE(), max_steps=max_steps, random_seed=42)]
-    nf_residuals = NeuralForecast(models=nbeats_residuals_model, freq=freq)
-    nf_residuals.fit(df=residuals_train_df_fmt)
-    residuals_forecasts = nf_residuals.predict()['NBEATS'].values
-    final_forecast = var_forecasts + residuals_forecasts
-    df_out = create_standard_forecast_df(test_df, final_forecast, dataset_name, target_column)
-    # --- MUDANÇA AQUI: Aplicando a nova nomenclatura ---
-    return save_forecasts(df_out, forecast_dir, "Hybrid_MIMO_N-BEATS", dataset_name)
