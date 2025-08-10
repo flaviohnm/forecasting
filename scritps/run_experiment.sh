@@ -9,7 +9,7 @@ clear
 # source .venv/Scripts/activate
 
 # 3. Executa o script principal da pipeline
-echo "Iniciando a execucao do experimento..."
-python main.py
+echo "Iniciando a execucao dos experimentos..."
+python run_experiments.py
 
-echo "Execucao concluida."
+echo "Execucao dos experimentos concluida."
