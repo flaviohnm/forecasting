@@ -1,4 +1,4 @@
-# /forecasting/requirements.txt (VERSÃO ATUALIZADA)
+# /forecasting/requirements.txt (VERSÃO FINAL E COMPLETA)
 
 # --- Core de Análise de Dados e ML ---
 pandas==2.2.2
@@ -12,8 +12,8 @@ scipy==1.12.0
 pmdarima==2.0.4
 
 # --- Modelos de Deep Learning para Séries Temporais ---
-# ATUALIZADO para uma versão mais recente que inclui NHiTS
-neuralforecast==1.7.2 
+# Instalando com [auto] para garantir todas as dependências de todos os modelos
+neuralforecast==3.0.2 
 pytorch-lightning==2.2.5
 torch==2.3.1
 

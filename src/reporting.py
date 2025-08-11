@@ -1,4 +1,4 @@
-# /forecasting/src/reporting.py (VERSÃO COM CORREÇÃO DE NOMES DE ARQUIVO)
+# /forecasting/src/reporting.py (VERSÃO COM FORMATAÇÃO DE 3 CASAS DECIMAIS)
 import pandas as pd
 import numpy as np
 from pathlib import Path
@@ -7,19 +7,20 @@ import matplotlib.pyplot as plt
 from sklearn.metrics import mean_absolute_error, mean_squared_error
 
 def calculate_mase(train_series, test_series, forecast_series):
-    # (Esta função não muda)
-    train_series = np.array(train_series); test_series = np.array(test_series); forecast_series = np.array(forecast_series)
+    """Calcula o Mean Absolute Scaled Error (MASE)."""
+    train_series = np.array(train_series)
+    test_series = np.array(test_series)
+    forecast_series = np.array(forecast_series)
     n = len(train_series)
     d = np.abs(np.diff(train_series)).sum() / (n - 1)
     if d == 0: return np.inf
     errors = np.abs(test_series - forecast_series)
     return errors.mean() / d
 
-# --- MUDANÇA AQUI: Adicionando o parâmetro 'model_name' ---
 def evaluate_forecasts(forecast_path: str, train_path: str, results_dir: str, target_column: str, model_name: str):
     """Calcula e salva um conjunto de métricas de erro."""
-    print(f"Avaliando previsões de: {forecast_path}")
-    forecast_df, train_df = pd.read_csv(forecast_path), pd.read_csv(train_path)
+    forecast_df = pd.read_csv(forecast_path)
+    train_df = pd.read_csv(train_path)
     
     clean_df = forecast_df.dropna(subset=['actual', 'forecast'])
     if len(clean_df) == 0: return None
@@ -32,7 +33,6 @@ def evaluate_forecasts(forecast_path: str, train_path: str, results_dir: str, ta
     }
     print(f"Métricas para o modelo {model_name}: {metrics}")
 
-    # --- MUDANÇA AQUI: Usando o 'model_name' para salvar o arquivo ---
     results_path = Path(results_dir) / f"{model_name}_metrics.json"
     results_path.parent.mkdir(parents=True, exist_ok=True)
     with open(results_path, 'w') as f:
@@ -42,10 +42,12 @@ def evaluate_forecasts(forecast_path: str, train_path: str, results_dir: str, ta
     return str(results_path)
 
 def generate_final_report(results_dir: str, dataset_name: str, forecast_horizon: int, model_names: list):
-    # (O restante do arquivo não muda)
+    """Agrega todas as métricas e previsões para gerar um relatório final em Markdown."""
     print("\n[ETAPA FINAL] Gerando relatório consolidado...")
+    
     metrics_dir = Path(results_dir) / "metrics" / dataset_name
     all_metrics = []
+    
     for model_name in model_names:
         metric_file = metrics_dir / f"{model_name}_metrics.json"
         if metric_file.exists():
@@ -55,41 +57,60 @@ def generate_final_report(results_dir: str, dataset_name: str, forecast_horizon:
                 all_metrics.append(metrics)
         else:
             print(f"AVISO: Arquivo de métrica não encontrado para o modelo '{model_name}' em {metric_file}")
+    
     if not all_metrics:
         print("Nenhum arquivo de métrica encontrado para gerar o relatório.")
         return
+
     metrics_df = pd.DataFrame(all_metrics).set_index('model')
-    metrics_table_md = metrics_df.round(4).to_markdown()
+    
+    # --- MUDANÇA AQUI: Padronizando para 3 casas decimais ---
+    metrics_table_md = metrics_df.round(3).to_markdown()
+
     forecast_dir = Path(results_dir) / "forecasts" / dataset_name / "csv"
     plt.figure(figsize=(12, 8))
+    
     first_forecast_file = next(forecast_dir.glob('*.csv'), None)
     if first_forecast_file:
         df_actual = pd.read_csv(first_forecast_file)
         plt.plot(pd.to_datetime(df_actual['ds']), df_actual['actual'], label='Valores Reais', color='black', linewidth=2.5)
+
     for model_name in model_names:
         forecast_file = forecast_dir / f"{dataset_name}_{model_name}_forecasts.csv"
         if forecast_file.exists():
             df_forecast = pd.read_csv(forecast_file)
             plt.plot(pd.to_datetime(df_forecast['ds']), df_forecast['forecast'], label=model_name, linestyle='--')
+
     plt.title(f'Comparação de Previsões - Dataset {dataset_name.capitalize()}', fontsize=16)
     plt.xlabel('Data'); plt.ylabel('Valor'); plt.legend(); plt.grid(True, linestyle='--', alpha=0.6)
+    
     reports_dir = Path(results_dir) / "reports"; images_dir = reports_dir / "images"
     images_dir.mkdir(parents=True, exist_ok=True)
     plot_path = images_dir / f"forecast_comparison_{dataset_name}.png"
     plt.savefig(plot_path)
     plt.close()
+    print(f"Gráfico comparativo salvo em: {plot_path}")
+
     report_content = f"""
 # Relatório de Benchmark de Modelos de Forecasting
+
 **Dataset:** `{dataset_name}`
 **Horizonte de Previsão:** `{forecast_horizon}` passos
+
 ## Resumo das Métricas de Performance
-A tabela abaixo compara o desempenho de todos os modelos executados.
+
+A tabela abaixo compara o desempenho de todos os modelos executados. A métrica principal para comparação, conforme as boas práticas, é o **MASE (Mean Absolute Scaled Error)**. Um valor de MASE < 1 indica que o modelo é melhor que uma previsão ingênua (naive) no conjunto de treino.
+
 {metrics_table_md}
+
 ## Gráfico Comparativo das Previsões
-O gráfico abaixo mostra as previsões de cada modelo em comparação com os valores reais.
+
+O gráfico abaixo mostra as previsões de cada modelo em comparação com os valores reais do conjunto de teste.
+
 ![Comparativo de Previsões](images/forecast_comparison_{dataset_name}.png)
 """
     report_path = reports_dir / "final_report.md"
     with open(report_path, 'w', encoding='utf-8') as f:
         f.write(report_content)
+        
     print(f"--- Relatório Final gerado com sucesso em: {report_path} ---")
