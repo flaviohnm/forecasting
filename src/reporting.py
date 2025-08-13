@@ -1,4 +1,4 @@
-# /forecasting/src/reporting.py (VERSÃO COM FORMATAÇÃO DE 3 CASAS DECIMAIS)
+# /forecasting/src/reporting.py (VERSÃO COM FORMATAÇÃO EM NEGRITO)
 import pandas as pd
 import numpy as np
 from pathlib import Path
@@ -17,15 +17,40 @@ def calculate_mase(train_series, test_series, forecast_series):
     errors = np.abs(test_series - forecast_series)
     return errors.mean() / d
 
-def evaluate_forecasts(forecast_path: str, train_path: str, results_dir: str, target_column: str, model_name: str):
-    """Calcula e salva um conjunto de métricas de erro."""
+def create_and_save_forecast_df(test_df: pd.DataFrame, forecast_values: np.ndarray, forecast_dir: str, model_name: str, dataset_name: str, target_column: str, ds_column='ds'):
+    """Cria um DataFrame padronizado com as previsões e salva em CSV."""
+    df_out = pd.DataFrame({
+        'unique_id': dataset_name,
+        'ds': test_df[ds_column].values,
+        'actual': test_df[target_column].values,
+        'forecast': forecast_values
+    })
+    
+    output_path = Path(forecast_dir)
+    csv_path_dir = output_path / "csv"
+    csv_path_dir.mkdir(parents=True, exist_ok=True)
+    
+    base_filename = f"{dataset_name}_{model_name}_forecasts"
+    csv_path = csv_path_dir / f"{base_filename}.csv"
+    df_out.to_csv(csv_path, index=False)
+    
+    pkl_path_dir = output_path / "pkl"
+    pkl_path_dir.mkdir(parents=True, exist_ok=True)
+    pkl_path = pkl_path_dir / f"{base_filename}.pkl"
+    df_out.to_pickle(pkl_path)
+    
+    print(f"Previsões do modelo '{model_name}' salvas em: {csv_path}")
+    return str(csv_path)
+
+def evaluate_forecasts(forecast_path: str, train_df: pd.DataFrame, results_dir: str, target_column: str, model_name: str):
+    """Calcula e salva um conjunto de métricas de erro. Recebe train_df diretamente."""
     forecast_df = pd.read_csv(forecast_path)
-    train_df = pd.read_csv(train_path)
     
     clean_df = forecast_df.dropna(subset=['actual', 'forecast'])
     if len(clean_df) == 0: return None
 
     actuals, forecasts, train_series = clean_df['actual'], clean_df['forecast'], train_df[target_column]
+    
     metrics = {
         "MAE": mean_absolute_error(actuals, forecasts),
         "RMSE": np.sqrt(mean_squared_error(actuals, forecasts)),
@@ -64,8 +89,25 @@ def generate_final_report(results_dir: str, dataset_name: str, forecast_horizon:
 
     metrics_df = pd.DataFrame(all_metrics).set_index('model')
     
-    # --- MUDANÇA AQUI: Padronizando para 3 casas decimais ---
-    metrics_table_md = metrics_df.round(3).to_markdown()
+    # --- NOVO BLOCO DE ESTILIZAÇÃO PARA DEIXAR VALORES MÍNIMOS EM NEGRITO ---
+    # Cria uma cópia do dataframe para estilização, arredondando para 3 casas e convertendo para string
+    styled_df = metrics_df.round(3).astype(str)
+
+    # Itera sobre cada coluna de métrica para encontrar e formatar o valor mínimo
+    for col in metrics_df.columns:
+        # idxmin() obtém o índice (nome do modelo) do valor mínimo na coluna
+        min_idx = metrics_df[col].idxmin()
+        
+        # Obtém o valor, o formata como uma string markdown em negrito com 3 casas decimais
+        original_value = metrics_df.loc[min_idx, col]
+        bold_value = f"**{original_value:.3f}**"
+        
+        # Atualiza o dataframe de estilo com o valor em negrito
+        styled_df.loc[min_idx, col] = bold_value
+
+    # Gera a tabela markdown a partir do dataframe estilizado
+    metrics_table_md = styled_df.to_markdown()
+    # --- FIM DO NOVO BLOCO DE ESTILIZAÇÃO ---
 
     forecast_dir = Path(results_dir) / "forecasts" / dataset_name / "csv"
     plt.figure(figsize=(12, 8))
