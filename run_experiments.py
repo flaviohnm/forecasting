@@ -51,7 +51,8 @@ ALL_DATASET_CONFIGS = [
 def load_experiments_from_config(config_path='models_config.json'):
     """
     Carrega a configuração dos modelos a partir de um arquivo JSON,
-    montando o dicionário de experimentos dinamicamente.
+    montando o dicionário de experimentos dinamicamente e mapeando
+    parâmetros de texto para os objetos corretos.
     """
     MODEL_FUNCTIONS = {
         "Naive": train_and_forecast_naive, "ARIMA": train_and_forecast_arima, "ETS": train_and_forecast_ets,
@@ -65,24 +66,40 @@ def load_experiments_from_config(config_path='models_config.json'):
         "Hybrid_Direct_N-HiTS": train_and_forecast_hybrid_direct_nhits,
         "Hybrid_MIMO_N-HiTS": train_and_forecast_hybrid_mimo_nhits
     }
+    
+    OPTIMIZERS = {
+        "Adam": Adam
+    }
 
     with open(config_path, 'r') as f:
         config = json.load(f)
 
     experiments = {}
 
+    # Função auxiliar para processar os parâmetros
+    def process_params(params):
+        if "optimizer" in params and isinstance(params["optimizer"], str):
+            optimizer_name = params["optimizer"]
+            if optimizer_name in OPTIMIZERS:
+                params["optimizer"] = OPTIMIZERS[optimizer_name]
+            else:
+                raise ValueError(f"Otimizador '{optimizer_name}' não reconhecido.")
+        
+        if 'mlp_units' in params and isinstance(params['mlp_units'], str):
+            params['mlp_units'] = json.loads(params['mlp_units'])
+
+        # Lógica essencial para converter stack_types de texto para lista
+        if 'stack_types' in params and isinstance(params['stack_types'], str):
+            params['stack_types'] = json.loads(params['stack_types'].replace("'", '"'))
+            
+        return params
+
     # Processa modelos estáticos
     for model_conf in config['models']:
         if model_conf.get('enabled', False):
             model_name = model_conf['name']
-            params = model_conf.get('params', {})
+            params = process_params(model_conf.get('params', {}))
             
-            if any(k in model_name for k in ["NBEATS", "NHiTS", "LSTM", "Transformer", "Hybrid"]):
-                params["optimizer"] = Adam
-            
-            if 'mlp_units' in params and isinstance(params['mlp_units'], str):
-                params['mlp_units'] = json.loads(params['mlp_units'])
-
             experiments[model_name] = {
                 "func": MODEL_FUNCTIONS[model_name],
                 "params": params
@@ -91,8 +108,7 @@ def load_experiments_from_config(config_path='models_config.json'):
     # Processa modelos MLP dinâmicos
     if config.get('dynamic_mlp_models', {}).get('enabled', False):
         mlp_config = config['dynamic_mlp_models']
-        mlp_base_params = mlp_config.get('base_params', {})
-        mlp_base_params["optimizer"] = Adam
+        mlp_base_params = process_params(mlp_config.get('base_params', {}))
         
         dynamic_mlp_functions = {
             "MLP_MIMO": train_and_forecast_mimo_mlp,
@@ -112,7 +128,6 @@ def load_experiments_from_config(config_path='models_config.json'):
     if not experiments:
         print("AVISO: Nenhum experimento foi habilitado no arquivo 'models_config.json'. A execução será encerrada.")
     return experiments
-
 
 # ==============================================================================
 
