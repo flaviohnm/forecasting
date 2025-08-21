@@ -1,218 +1,150 @@
-# /forecasting/src/models.py (VERSÃO REATORADA E COMPLETA)
+# VERSÃO DEFINITIVA E CORRIGIDA do models.py
 import pandas as pd
 import pmdarima as pm
 import numpy as np
 from statsmodels.tsa.api import ExponentialSmoothing
 from neuralforecast import NeuralForecast
 from neuralforecast.models import NBEATS, LSTM, MLP, iTransformer, NHITS
-from neuralforecast.losses.pytorch import MAE
 
-# --- Função Auxiliar (Apenas a necessária para a modelagem) ---
+# --- Funções Auxiliares ---
 def prepare_df_dl(df_time, y_series, unique_id, ds_column='ds'):
-    """Prepara um DataFrame para o formato exigido pela NeuralForecast."""
-    return pd.DataFrame({'ds': df_time[ds_column], 'y': y_series.astype('float32'), 'unique_id': unique_id})
+    y_values = np.array(y_series)
+    return pd.DataFrame({'ds': df_time[ds_column], 'y': y_values.astype('float32'), 'unique_id': unique_id})
 
-# --- Modelos Puros (Baselines) ---
+# --- Modelos Clássicos e Baselines ---
+def train_and_forecast_naive(train_df: pd.DataFrame, test_df: pd.DataFrame, target_column: str, **kwargs):
+    last_value = train_df[target_column].iloc[-1]
+    return np.full(len(test_df), fill_value=last_value)
+
 def train_and_forecast_arima(train_df: pd.DataFrame, test_df: pd.DataFrame, seasonality: int, target_column: str, **kwargs):
     model = pm.auto_arima(train_df[target_column], m=seasonality, seasonal=True, trace=False, suppress_warnings=True, error_action='ignore')
-    forecasts = model.predict(n_periods=len(test_df))
-    return forecasts.values
+    return model.predict(n_periods=len(test_df)).values
 
-def train_and_forecast_ets(train_df: pd.DataFrame, test_df: pd.DataFrame, seasonality: int, target_column: str, **kwargs):
-    train_series = train_df.set_index('ds')[target_column]
+def train_and_forecast_ets(train_df: pd.DataFrame, test_df: pd.DataFrame, seasonality: int, target_column: str, freq: str, **kwargs):
+    train_series = train_df.set_index('ds')[target_column].asfreq(freq)
     model = ExponentialSmoothing(train_series, trend='add', seasonal='add', seasonal_periods=seasonality).fit()
-    forecasts = model.forecast(steps=len(test_df))
-    return forecasts.values
+    return model.forecast(steps=len(test_df)).values
 
-def train_and_forecast_nbeats_direct(train_df: pd.DataFrame, test_df: pd.DataFrame, dataset_name: str, max_steps: int, target_column: str, freq: str, **kwargs):
-    horizon = len(test_df)
-    all_forecasts = []
-    for h in range(1, horizon + 1):
-        target_series = train_df[target_column].shift(-h).dropna()
-        train_df_h = train_df.iloc[:len(target_series)]
-        train_df_fmt_h = prepare_df_dl(train_df_h, target_series, f'{dataset_name}_h{h}')
-        models = [NBEATS(input_size=2 * horizon, h=1, loss=MAE(), max_steps=max_steps, random_seed=42, stack_types=['identity'])]
-        nf = NeuralForecast(models=models, freq=freq)
-        nf.fit(df=train_df_fmt_h)
-        forecast_h = nf.predict()['NBEATS'].values[0]
-        all_forecasts.append(forecast_h)
-    return np.array(all_forecasts)
+# =====================================================================================
+# --- Lógica Centralizada e Corrigida para Modelos de Deep Learning ---
+# =====================================================================================
 
-def train_and_forecast_nbeats_mimo(train_df: pd.DataFrame, test_df: pd.DataFrame, dataset_name: str, max_steps: int, target_column: str, freq: str, **kwargs):
-    horizon = len(test_df)
-    train_df_fmt = prepare_df_dl(train_df, train_df[target_column], dataset_name)
-    models = [NBEATS(input_size=2 * horizon, h=horizon, loss=MAE(), max_steps=max_steps, random_seed=42)]
-    nf = NeuralForecast(models=models, freq=freq)
-    nf.fit(df=train_df_fmt)
-    forecasts_df_raw = nf.predict()
-    return forecasts_df_raw['NBEATS'].values
-
-def train_and_forecast_nhits_direct(train_df: pd.DataFrame, test_df: pd.DataFrame, dataset_name: str, max_steps: int, target_column: str, freq: str, **kwargs):
-    horizon = len(test_df)
-    all_forecasts = []
-    print("[NHiTS-Direct] Treinando 'h' modelos, um para cada passo do horizonte...")
-    for h in range(1, horizon + 1):
-        target_series = train_df[target_column].shift(-h).dropna()
-        train_df_h = train_df.iloc[:len(target_series)]
-        train_df_fmt_h = prepare_df_dl(train_df_h, target_series, f'{dataset_name}_h{h}')
-        models = [NHITS(input_size=2 * horizon, h=1, loss=MAE(), max_steps=max_steps, random_seed=42)]
-        nf = NeuralForecast(models=models, freq=freq)
-        nf.fit(df=train_df_fmt_h)
-        forecast_h = nf.predict()['NHITS'].values[0]
-        all_forecasts.append(forecast_h)
-    return np.array(all_forecasts)
-
-def train_and_forecast_nhits_mimo(train_df: pd.DataFrame, test_df: pd.DataFrame, dataset_name: str, max_steps: int, target_column: str, freq: str, **kwargs):
-    horizon = len(test_df)
-    train_df_fmt = prepare_df_dl(train_df, train_df[target_column], dataset_name)
-    models = [NHITS(input_size=2 * horizon, h=horizon, loss=MAE(), max_steps=max_steps, random_seed=42)]
-    nf = NeuralForecast(models=models, freq=freq)
-    nf.fit(df=train_df_fmt)
-    forecasts_df_raw = nf.predict()
-    return forecasts_df_raw['NHITS'].values
-
-def train_and_forecast_lstm_direct(train_df: pd.DataFrame, test_df: pd.DataFrame, dataset_name: str, max_steps: int, target_column: str, freq: str, **kwargs):
-    horizon = len(test_df)
-    all_forecasts = []
-    for h in range(1, horizon + 1):
-        target_series = train_df[target_column].shift(-h).dropna()
-        train_df_h = train_df.iloc[:len(target_series)]
-        train_df_fmt_h = prepare_df_dl(train_df_h, target_series, f'{dataset_name}_h{h}')
-        models = [LSTM(input_size=2 * horizon, h=1, loss=MAE(), max_steps=max_steps, random_seed=42)]
-        nf = NeuralForecast(models=models, freq=freq)
-        nf.fit(df=train_df_fmt_h)
-        forecast_h = nf.predict()['LSTM'].values[0]
-        all_forecasts.append(forecast_h)
-    return np.array(all_forecasts)
-
-def train_and_forecast_lstm_mimo(train_df: pd.DataFrame, test_df: pd.DataFrame, dataset_name: str, max_steps: int, target_column: str, freq: str, **kwargs):
-    horizon = len(test_df)
-    train_df_fmt = prepare_df_dl(train_df, train_df[target_column], dataset_name)
-    models = [LSTM(input_size=2 * horizon, h=horizon, loss=MAE(), max_steps=max_steps, random_seed=42)]
-    nf = NeuralForecast(models=models, freq=freq)
-    nf.fit(df=train_df_fmt)
-    forecasts_df_raw = nf.predict()
-    return forecasts_df_raw['LSTM'].values
-
-def train_and_forecast_mlp_direct(train_df: pd.DataFrame, test_df: pd.DataFrame, dataset_name: str, max_steps: int, target_column: str, freq: str, **kwargs):
-    horizon = len(test_df)
-    all_forecasts = []
-    for h in range(1, horizon + 1):
-        target_series = train_df[target_column].shift(-h).dropna()
-        train_df_h = train_df.iloc[:len(target_series)]
-        train_df_fmt_h = prepare_df_dl(train_df_h, target_series, f'{dataset_name}_h{h}')
-        models = [MLP(input_size=2 * horizon, h=1, loss=MAE(), max_steps=max_steps, random_seed=42)]
-        nf = NeuralForecast(models=models, freq=freq)
-        nf.fit(df=train_df_fmt_h)
-        forecast_h = nf.predict()['MLP'].values[0]
-        all_forecasts.append(forecast_h)
-    return np.array(all_forecasts)
-
-def train_and_forecast_mlp_mimo(train_df: pd.DataFrame, test_df: pd.DataFrame, dataset_name: str, max_steps: int, target_column: str, freq: str, **kwargs):
-    horizon = len(test_df)
-    train_df_fmt = prepare_df_dl(train_df, train_df[target_column], dataset_name)
-    models = [MLP(input_size=2 * horizon, h=horizon, loss=MAE(), max_steps=max_steps, random_seed=42)]
-    nf = NeuralForecast(models=models, freq=freq)
-    nf.fit(df=train_df_fmt)
-    forecasts_df_raw = nf.predict()
-    return forecasts_df_raw['MLP'].values
-
-def train_and_forecast_transformer_mimo(train_df: pd.DataFrame, test_df: pd.DataFrame, dataset_name: str, max_steps: int, target_column: str, freq: str, **kwargs):
-    horizon = len(test_df)
-    train_df_fmt = prepare_df_dl(train_df, train_df[target_column], dataset_name)
-    models = [iTransformer(input_size=2 * horizon, h=horizon, n_series=1, loss=MAE(), max_steps=max_steps, random_seed=42)]
-    nf = NeuralForecast(models=models, freq=freq)
-    nf.fit(df=train_df_fmt)
-    forecasts_df_raw = nf.predict()
-    return forecasts_df_raw['iTransformer'].values
+def _filter_dl_params(all_params: dict):
+    """
+    Filtra os kwargs para separar os parâmetros do modelo e do treinador,
+    removendo chaves internas do pipeline.
+    """
+    INTERNAL_KEYS = ['train_df', 'test_df', 'target_column', 'dataset_name', 'seasonality', 'is_mimo', 'model_cls', 'model_name', 'freq','activation']
+    KNOWN_TRAINER_KEYS = [
+        'gpus', 'accelerator', 'batch_size', 'num_workers',
+        'val_check_steps', 'early_stop_patience_steps'
+    ]
     
+    trainer_params = {}
+    model_params = {}
+
+    for key, value in all_params.items():
+        if key in KNOWN_TRAINER_KEYS:
+            trainer_params[key] = value
+        elif key not in INTERNAL_KEYS:
+            model_params[key] = value
+            
+    return model_params, trainer_params
+
+def run_deep_learning_model(model_cls, model_name, train_df, test_df, is_mimo, **kwargs):
+    """
+    Função genérica e robusta para treinar qualquer modelo do NeuralForecast.
+    """
+    target_column = kwargs['target_column']
+    dataset_name = kwargs['dataset_name']
+    freq = kwargs['freq']
+    horizon = len(test_df)
+    
+    model_params, trainer_params = _filter_dl_params(kwargs)
+
+    if is_mimo:
+        train_df_fmt = prepare_df_dl(train_df, train_df[target_column], dataset_name)
+        model_params.setdefault('input_size', 2 * horizon)
+        
+        models = [model_cls(h=horizon, **model_params)]
+        nf = NeuralForecast(models=models, freq=freq, **trainer_params)
+        nf.fit(df=train_df_fmt)
+        return nf.predict()[model_name].values
+    else:  # Estratégia Direta
+        all_forecasts = []
+        for h in range(1, horizon + 1):
+            target_series = train_df[target_column].shift(-h).dropna()
+            train_df_h = train_df.iloc[:len(target_series)]
+            train_df_fmt_h = prepare_df_dl(train_df_h, target_series, f'{dataset_name}_h{h}')
+            
+            model_params_h = model_params.copy()
+            model_params_h.setdefault('input_size', 2 * horizon)
+            
+            models = [model_cls(h=1, **model_params_h)]
+            nf = NeuralForecast(models=models, freq=freq, **trainer_params.copy())
+            nf.fit(df=train_df_fmt_h)
+            
+            forecast_h = nf.predict()[model_name].values[0]
+            all_forecasts.append(forecast_h)
+        return np.array(all_forecasts)
+
+# --- Interfaces para os modelos ---
+def train_and_forecast_mimo_mlp(train_df, test_df, **kwargs):
+    return run_deep_learning_model(MLP, 'MLP', train_df, test_df, is_mimo=True, **kwargs)
+def train_and_forecast_direct_mlp(train_df, test_df, **kwargs):
+    return run_deep_learning_model(MLP, 'MLP', train_df, test_df, is_mimo=False, **kwargs)
+def train_and_forecast_nbeats_mimo(train_df, test_df, **kwargs):
+    return run_deep_learning_model(NBEATS, 'NBEATS', train_df, test_df, is_mimo=True, **kwargs)
+def train_and_forecast_nbeats_direct(train_df, test_df, **kwargs):
+    return run_deep_learning_model(NBEATS, 'NBEATS', train_df, test_df, is_mimo=False, **kwargs)
+def train_and_forecast_nhits_mimo(train_df, test_df, **kwargs):
+    return run_deep_learning_model(NHITS, 'NHITS', train_df, test_df, is_mimo=True, **kwargs)
+def train_and_forecast_nhits_direct(train_df, test_df, **kwargs):
+    return run_deep_learning_model(NHITS, 'NHITS', train_df, test_df, is_mimo=False, **kwargs)
+def train_and_forecast_lstm_mimo(train_df, test_df, **kwargs):
+    return run_deep_learning_model(LSTM, 'LSTM', train_df, test_df, is_mimo=True, **kwargs)
+def train_and_forecast_lstm_direct(train_df, test_df, **kwargs):
+    return run_deep_learning_model(LSTM, 'LSTM', train_df, test_df, is_mimo=False, **kwargs)
+def train_and_forecast_transformer_mimo(train_df, test_df, **kwargs):
+    return run_deep_learning_model(iTransformer, 'iTransformer', train_df, test_df, is_mimo=True, **kwargs)
+
 # --- Modelos Híbridos ---
-def train_and_forecast_hybrid_direct_nbeats(train_df: pd.DataFrame, test_df: pd.DataFrame, dataset_name: str, seasonality: int, max_steps: int, target_column: str, freq: str, **kwargs):
+def run_hybrid_strategy_wrapper(model_cls, model_name, is_mimo, train_df, test_df, **kwargs):
     horizon = len(test_df)
-    arima_model = pm.auto_arima(train_df[target_column], m=seasonality, seasonal=True, trace=False, suppress_warnings=True, error_action='ignore')
-    arima_forecasts = arima_model.predict(n_periods=horizon)
-    residuals_train = pd.Series(arima_model.resid()).astype('float32')
-    all_residuals_forecasts = []
-    for h in range(1, horizon + 1):
-        target_residuals = residuals_train.shift(-h).dropna()
-        train_df_h = train_df.iloc[:len(target_residuals)]
-        residuals_train_df_fmt_h = prepare_df_dl(train_df_h, target_residuals, f'{dataset_name}_residuals_h{h}')
-        nbeats_residuals_model = [NBEATS(input_size=2 * horizon, h=1, loss=MAE(), max_steps=max_steps, random_seed=42, stack_types=['identity'])]
-        nf_residuals = NeuralForecast(models=nbeats_residuals_model, freq=freq)
-        nf_residuals.fit(df=residuals_train_df_fmt_h)
-        forecast_h = nf_residuals.predict()['NBEATS'].values[0]
-        all_residuals_forecasts.append(forecast_h)
-    residuals_forecasts = np.array(all_residuals_forecasts)
-    final_forecast = arima_forecasts.values + residuals_forecasts
-    return final_forecast
-
-def train_and_forecast_hybrid_mimo_nbeats(train_df: pd.DataFrame, test_df: pd.DataFrame, dataset_name: str, seasonality: int, max_steps: int, target_column: str, freq: str, **kwargs):
-    horizon = len(test_df)
-    arima_model = pm.auto_arima(train_df[target_column], m=seasonality, seasonal=True, trace=False, suppress_warnings=True, error_action='ignore')
-    arima_forecasts = arima_model.predict(n_periods=horizon)
-    residuals_train = pd.Series(arima_model.resid()).astype('float32')
-    residuals_train_df_fmt = prepare_df_dl(train_df.iloc[:len(residuals_train)], residuals_train, f'{dataset_name}_residuals')
-    nbeats_residuals_model = [NBEATS(input_size=2 * horizon, h=horizon, loss=MAE(), max_steps=max_steps, random_seed=42)]
-    nf_residuals = NeuralForecast(models=nbeats_residuals_model, freq=freq)
-    nf_residuals.fit(df=residuals_train_df_fmt)
-    residuals_forecasts = nf_residuals.predict()['NBEATS'].values
-    final_forecast = arima_forecasts.values + residuals_forecasts
-    return final_forecast
+    seasonality = kwargs['seasonality']
+    target_column = kwargs['target_column']
     
-def train_and_forecast_hybrid_arima_mlp(train_df: pd.DataFrame, test_df: pd.DataFrame, dataset_name: str, seasonality: int, max_steps: int, target_column: str, freq: str, **kwargs):
-    horizon = len(test_df)
+    print("   [Híbrido] Treinando modelo ARIMA...")
     arima_model = pm.auto_arima(train_df[target_column], m=seasonality, seasonal=True, trace=False, suppress_warnings=True, error_action='ignore')
     arima_forecasts = arima_model.predict(n_periods=horizon)
     residuals_train = pd.Series(arima_model.resid()).astype('float32')
-    residuals_train_df_fmt = prepare_df_dl(train_df.iloc[:len(residuals_train)], residuals_train, f'{dataset_name}_residuals')
-    mlp_residuals_model = [MLP(input_size=2 * horizon, h=horizon, loss=MAE(), max_steps=max_steps, random_seed=42)]
-    nf_residuals = NeuralForecast(models=mlp_residuals_model, freq=freq)
-    nf_residuals.fit(df=residuals_train_df_fmt)
-    residuals_forecasts = nf_residuals.predict()['MLP'].values
-    final_forecast = arima_forecasts.values + residuals_forecasts
-    return final_forecast
+    
+    print(f"   [Híbrido] Treinando modelo {model_name} nos resíduos...")
+    residuals_train_df = pd.DataFrame({'ds': train_df['ds'].iloc[:len(residuals_train)], 'residuals': residuals_train})
+    
+    hybrid_kwargs = kwargs.copy()
+    hybrid_kwargs['target_column'] = 'residuals'
+    hybrid_kwargs['dataset_name'] = f"{kwargs['dataset_name']}_residuals"
+    
+    residuals_forecasts = run_deep_learning_model(
+        model_cls=model_cls, model_name=model_name,
+        train_df=residuals_train_df, test_df=test_df,
+        is_mimo=is_mimo, **hybrid_kwargs
+    )
+    return arima_forecasts.values + residuals_forecasts
 
-def train_and_forecast_hybrid_recursive_lstm(train_df: pd.DataFrame, test_df: pd.DataFrame, dataset_name: str, seasonality: int, max_steps: int, target_column: str, freq: str, **kwargs):
-    horizon = len(test_df)
-    arima_model = pm.auto_arima(train_df[target_column], m=seasonality, seasonal=True, trace=False, suppress_warnings=True, error_action='ignore')
-    arima_forecasts = arima_model.predict(n_periods=horizon)
-    residuals_train = pd.Series(arima_model.resid()).astype('float32')
-    residuals_train_df_fmt = prepare_df_dl(train_df.iloc[:len(residuals_train)], residuals_train, f'{dataset_name}_residuals')
-    lstm_residuals_model = [LSTM(input_size=2 * horizon, h=horizon, loss=MAE(), max_steps=max_steps, random_seed=42)]
-    nf_residuals = NeuralForecast(models=lstm_residuals_model, freq=freq)
-    nf_residuals.fit(df=residuals_train_df_fmt)
-    residuals_forecasts = nf_residuals.predict()['LSTM'].values
-    final_forecast = arima_forecasts.values + residuals_forecasts
-    return final_forecast
-
-def train_and_forecast_hybrid_direct_nhits(train_df: pd.DataFrame, test_df: pd.DataFrame, dataset_name: str, seasonality: int, max_steps: int, target_column: str, freq: str, **kwargs):
-    horizon = len(test_df)
-    arima_model = pm.auto_arima(train_df[target_column], m=seasonality, seasonal=True, trace=False, suppress_warnings=True, error_action='ignore')
-    arima_forecasts = arima_model.predict(n_periods=horizon)
-    residuals_train = pd.Series(arima_model.resid()).astype('float32')
-    all_residuals_forecasts = []
-    for h in range(1, horizon + 1):
-        target_residuals = residuals_train.shift(-h).dropna()
-        train_df_h = train_df.iloc[:len(target_residuals)]
-        residuals_train_df_fmt_h = prepare_df_dl(train_df_h, target_residuals, f'{dataset_name}_residuals_h{h}')
-        nhits_residuals_model = [NHITS(input_size=2 * horizon, h=1, loss=MAE(), max_steps=max_steps, random_seed=42)]
-        nf_residuals = NeuralForecast(models=nhits_residuals_model, freq=freq)
-        nf_residuals.fit(df=residuals_train_df_fmt_h)
-        forecast_h = nf_residuals.predict()['NHITS'].values[0]
-        all_residuals_forecasts.append(forecast_h)
-    residuals_forecasts = np.array(all_residuals_forecasts)
-    final_forecast = arima_forecasts.values + residuals_forecasts
-    return final_forecast
-
-def train_and_forecast_hybrid_mimo_nhits(train_df: pd.DataFrame, test_df: pd.DataFrame, dataset_name: str, seasonality: int, max_steps: int, target_column: str, freq: str, **kwargs):
-    horizon = len(test_df)
-    arima_model = pm.auto_arima(train_df[target_column], m=seasonality, seasonal=True, trace=False, suppress_warnings=True, error_action='ignore')
-    arima_forecasts = arima_model.predict(n_periods=horizon)
-    residuals_train = pd.Series(arima_model.resid()).astype('float32')
-    residuals_train_df_fmt = prepare_df_dl(train_df.iloc[:len(residuals_train)], residuals_train, f'{dataset_name}_residuals')
-    nhits_residuals_model = [NHITS(input_size=2 * horizon, h=horizon, loss=MAE(), max_steps=max_steps, random_seed=42)]
-    nf_residuals = NeuralForecast(models=nhits_residuals_model, freq=freq)
-    nf_residuals.fit(df=residuals_train_df_fmt)
-    residuals_forecasts = nf_residuals.predict()['NHITS'].values
-    final_forecast = arima_forecasts.values + residuals_forecasts
-    return final_forecast
+# --- Interfaces para Modelos Híbridos ---
+def train_and_forecast_hybrid_mimo_mlp(train_df, test_df, **kwargs):
+    return run_hybrid_strategy_wrapper(MLP, 'MLP', True, train_df, test_df, **kwargs)
+def train_and_forecast_hybrid_direct_mlp(train_df, test_df, **kwargs):
+    return run_hybrid_strategy_wrapper(MLP, 'MLP', False, train_df, test_df, **kwargs)
+def train_and_forecast_hybrid_mimo_nbeats(train_df, test_df, **kwargs):
+    return run_hybrid_strategy_wrapper(NBEATS, 'NBEATS', True, train_df, test_df, **kwargs)
+def train_and_forecast_hybrid_direct_nbeats(train_df, test_df, **kwargs):
+    return run_hybrid_strategy_wrapper(NBEATS, 'NBEATS', False, train_df, test_df, **kwargs)
+def train_and_forecast_hybrid_mimo_nhits(train_df, test_df, **kwargs):
+    return run_hybrid_strategy_wrapper(NHITS, 'NHITS', True, train_df, test_df, **kwargs)
+def train_and_forecast_hybrid_direct_nhits(train_df, test_df, **kwargs):
+    return run_hybrid_strategy_wrapper(NHITS, 'NHITS', False, train_df, test_df, **kwargs)
+def train_and_forecast_hybrid_recursive_lstm(train_df, test_df, **kwargs):
+    return run_hybrid_strategy_wrapper(LSTM, 'LSTM', True, train_df, test_df, **kwargs)
