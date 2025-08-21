@@ -2,17 +2,17 @@
     "models": [
         {
             "name": "Naive",
-            "enabled": false,
+            "enabled": true,
             "params": {}
         },
         {
             "name": "ARIMA",
-            "enabled": false,
+            "enabled": true,
             "params": {}
         },
         {
             "name": "ETS",
-            "enabled": false,
+            "enabled": true,
             "params": {}
         },
         {
@@ -36,7 +36,7 @@
         },
         {
             "name": "NHiTS_Direct",
-            "enabled": false,
+            "enabled": true,
             "params": {
                 "max_steps": 100,
                 "learning_rate": 0.001,
@@ -46,7 +46,7 @@
         },
         {
             "name": "NHiTS_MIMO",
-            "enabled": false,
+            "enabled": true,
             "params": {
                 "max_steps": 100,
                 "learning_rate": 0.001,
@@ -56,7 +56,7 @@
         },
         {
             "name": "LSTM_Direct",
-            "enabled": false,
+            "enabled": true,
             "params": {
                 "max_steps": 500,
                 "encoder_hidden_size": 100,
@@ -67,7 +67,7 @@
         },
         {
             "name": "LSTM_MIMO",
-            "enabled": false,
+            "enabled": true,
             "params": {
                 "max_steps": 500,
                 "encoder_hidden_size": 100,
@@ -78,7 +78,7 @@
         },
         {
             "name": "Transformer_MIMO",
-            "enabled": false,
+            "enabled": true,
             "params": {
                 "max_steps": 100,
                 "n_series": 1,
@@ -89,30 +89,26 @@
         },
         {
             "name": "Hybrid_Direct_N-BEATS",
-            "enabled": false,
+            "enabled": true,
             "params": {
                 "max_steps": 100,
                 "learning_rate": 0.001,
                 "optimizer": "Adam",
-                "stack_types": "['identity']",
-                "num_blocks": 2,
-                "hidden_size": 128
+                "stack_types": "['identity']"
             }
         },
         {
             "name": "Hybrid_MIMO_N-BEATS",
-            "enabled": false,
+            "enabled": true,
             "params": {
                 "max_steps": 100,
                 "learning_rate": 0.001,
-                "optimizer": "Adam",
-                "num_blocks": 2,
-                "hidden_size": 128
+                "optimizer": "Adam"
             }
         },
         {
             "name": "Hybrid_Recursive_LSTM",
-            "enabled": false,
+            "enabled": true,
             "params": {
                 "max_steps": 100,
                 "encoder_hidden_size": 50,
@@ -123,7 +119,7 @@
         },
         {
             "name": "Hybrid_Direct_N-HiTS",
-            "enabled": false,
+            "enabled": true,
             "params": {
                 "max_steps": 100,
                 "learning_rate": 0.001,
@@ -133,7 +129,7 @@
         },
         {
             "name": "Hybrid_MIMO_N-HiTS",
-            "enabled": false,
+            "enabled": true,
             "params": {
                 "max_steps": 100,
                 "learning_rate": 0.001,
@@ -143,7 +139,7 @@
         }
     ],
     "dynamic_mlp_models": {
-        "enabled": false,
+        "enabled": true,
         "base_params": {
             "max_steps": 1000,
             "hidden_size": 100,

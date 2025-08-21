@@ -89,6 +89,7 @@ def run_deep_learning_model(model_cls, model_name, train_df, test_df, is_mimo, *
         return np.array(all_forecasts)
 
 # --- Interfaces para os modelos ---
+
 def train_and_forecast_mimo_mlp(train_df, test_df, **kwargs):
     return run_deep_learning_model(MLP, 'MLP', train_df, test_df, is_mimo=True, **kwargs)
 def train_and_forecast_direct_mlp(train_df, test_df, **kwargs):

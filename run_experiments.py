@@ -39,7 +39,7 @@ ALL_DATASET_CONFIGS = [
         "fetch_func": fetch_daily_births_data,
         "target_column": "value",
         "seasonality": 7,
-        "forecast_horizon": 10,
+        "forecast_horizon": 14,
         "freq": "D"
     }
 ]
