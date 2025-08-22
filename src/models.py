@@ -34,7 +34,7 @@ def _filter_dl_params(all_params: dict):
     Filtra os kwargs para separar os parâmetros do modelo e do treinador,
     removendo chaves internas do pipeline.
     """
-    INTERNAL_KEYS = ['train_df', 'test_df', 'target_column', 'dataset_name', 'seasonality', 'is_mimo', 'model_cls', 'model_name', 'freq','activation']
+    INTERNAL_KEYS = ['train_df', 'test_df', 'target_column', 'dataset_name', 'seasonality', 'is_mimo', 'model_cls', 'model_name', 'freq','activation','forecast_horizon']
     KNOWN_TRAINER_KEYS = [
         'gpus', 'accelerator', 'batch_size', 'num_workers',
         'val_check_steps', 'early_stop_patience_steps'

@@ -1,4 +1,4 @@
-# /forecasting/run_experiments.py (VERSÃO FINAL COMPLETA)
+# /forecasting/run_experiments.py (VERSÃO COM CONFIGURAÇÃO DE DATASETS EXTERNA)
 import time
 import os
 import copy
@@ -18,41 +18,59 @@ from src.models import (
     train_and_forecast_hybrid_recursive_lstm,
     train_and_forecast_hybrid_direct_nhits,
     train_and_forecast_hybrid_mimo_nhits)
-from src.data_processing import fetch_airline_data, fetch_daily_births_data, process_data_fixed_origin, load_processed_data
+from src.data_processing import (
+    fetch_airline_data, fetch_daily_births_data, fetch_sunspots_data, 
+    process_data_fixed_origin, load_processed_data
+)
 
 os.environ['NIXTLA_ID_AS_COL'] = '1'
 
 # ==============================================================================
-# PAINEL DE CONTROLE DOS DATASETS
-# ==============================================================================
-ALL_DATASET_CONFIGS = [
-    {
-        "name": "airline",
-        "fetch_func": fetch_airline_data,
-        "target_column": "passengers",
-        "seasonality": 12,
-        "forecast_horizon": 10,
-        "freq": "MS"
-    },
-    {
-        "name": "daily_births",
-        "fetch_func": fetch_daily_births_data,
-        "target_column": "value",
-        "seasonality": 7,
-        "forecast_horizon": 14,
-        "freq": "D"
-    }
-]
-
-# ==============================================================================
-# CARREGAMENTO DINÂMICO DOS EXPERIMENTOS
+# CARREGAMENTO DINÂMICO DOS DATASETS
 # ==============================================================================
 
-def load_experiments_from_config(config_path='models_config.json'):
+def load_datasets_from_config(config_path='./config/datasets_config.json'):
     """
-    Carrega a configuração dos modelos a partir de um arquivo JSON,
-    montando o dicionário de experimentos dinamicamente e mapeando
-    parâmetros de texto para os objetos corretos.
+    Carrega a configuração dos datasets a partir de um arquivo JSON.
+    """
+    DATASET_FETCH_FUNCS = {
+        "airline": fetch_airline_data,
+        "daily_births": fetch_daily_births_data,
+        "sunspots": fetch_sunspots_data
+    }
+
+    with open(config_path, 'r') as f:
+        config = json.load(f)
+    
+    enabled_datasets = []
+    for ds_conf in config.get('datasets', []):
+        if ds_conf.get('enabled', False):
+            # A chave no JSON é 'name', vamos usá-la para buscar a função
+            name = ds_conf['dataset_name']
+            if name not in DATASET_FETCH_FUNCS:
+                raise ValueError(f"Dataset '{name}' não possui uma função de carregamento correspondente.")
+            
+            # CORREÇÃO: Cria o dicionário final com a chave 'dataset_name'
+            full_config = {
+                "dataset_name": name, # <-- A CHAVE É CRIADA AQUI
+                "fetch_func": DATASET_FETCH_FUNCS[name],
+                **ds_conf['config']
+            }
+            enabled_datasets.append(full_config)
+
+    print(f"--- {len(enabled_datasets)} datasets habilitados para execução ---")
+    if not enabled_datasets:
+        print("AVISO: Nenhum dataset foi habilitado no arquivo 'datasets_config.json'.")
+    
+    return enabled_datasets
+
+# ==============================================================================
+# CARREGAMENTO DINÂMICO DOS EXPERIMENTOS (Modelos)
+# ==============================================================================
+
+def load_experiments_from_config(config_path='./config/models_config.json'):
+    """
+    Carrega a configuração dos modelos a partir de um arquivo JSON.
     """
     MODEL_FUNCTIONS = {
         "Naive": train_and_forecast_naive, "ARIMA": train_and_forecast_arima, "ETS": train_and_forecast_ets,
@@ -67,16 +85,13 @@ def load_experiments_from_config(config_path='models_config.json'):
         "Hybrid_MIMO_N-HiTS": train_and_forecast_hybrid_mimo_nhits
     }
     
-    OPTIMIZERS = {
-        "Adam": Adam
-    }
+    OPTIMIZERS = {"Adam": Adam}
 
     with open(config_path, 'r') as f:
         config = json.load(f)
 
     experiments = {}
 
-    # Função auxiliar para processar os parâmetros
     def process_params(params):
         if "optimizer" in params and isinstance(params["optimizer"], str):
             optimizer_name = params["optimizer"]
@@ -88,24 +103,17 @@ def load_experiments_from_config(config_path='models_config.json'):
         if 'mlp_units' in params and isinstance(params['mlp_units'], str):
             params['mlp_units'] = json.loads(params['mlp_units'])
 
-        # Lógica essencial para converter stack_types de texto para lista
         if 'stack_types' in params and isinstance(params['stack_types'], str):
             params['stack_types'] = json.loads(params['stack_types'].replace("'", '"'))
             
         return params
 
-    # Processa modelos estáticos
     for model_conf in config['models']:
         if model_conf.get('enabled', False):
             model_name = model_conf['name']
             params = process_params(model_conf.get('params', {}))
-            
-            experiments[model_name] = {
-                "func": MODEL_FUNCTIONS[model_name],
-                "params": params
-            }
+            experiments[model_name] = {"func": MODEL_FUNCTIONS[model_name], "params": params}
 
-    # Processa modelos MLP dinâmicos
     if config.get('dynamic_mlp_models', {}).get('enabled', False):
         mlp_config = config['dynamic_mlp_models']
         mlp_base_params = process_params(mlp_config.get('base_params', {}))
@@ -126,7 +134,7 @@ def load_experiments_from_config(config_path='models_config.json'):
 
     print(f"--- {len(experiments)} experimentos carregados do arquivo de configuração ---")
     if not experiments:
-        print("AVISO: Nenhum experimento foi habilitado no arquivo 'models_config.json'. A execução será encerrada.")
+        print("AVISO: Nenhum experimento foi habilitado no arquivo 'models_config.json'.")
     return experiments
 
 # ==============================================================================
@@ -138,15 +146,17 @@ def run():
     print("Iniciando a execucao dos experimentos...")
     start_time = time.time()
     
-    EXPERIMENTS = load_experiments_from_config()
+    ENABLED_DATASETS = load_datasets_from_config()
+    ENABLED_MODELS = load_experiments_from_config()
     
-    if not EXPERIMENTS:
+    if not ENABLED_DATASETS or not ENABLED_MODELS:
+        print("Execução encerrada devido à falta de datasets ou modelos habilitados.")
         return
 
     all_dataset_results = []
 
-    for dataset_config in ALL_DATASET_CONFIGS:
-        dataset_name = dataset_config["name"]
+    for dataset_config in ENABLED_DATASETS:
+        dataset_name = dataset_config["dataset_name"]
         target_column = dataset_config["target_column"]
         
         print(f"\n{'='*60}")
@@ -168,13 +178,12 @@ def run():
 
         print("\n[ETAPA 3/4] Executando experimentos de modelagem...")
         forecast_paths = {}
-        for model_name, model_config in EXPERIMENTS.items():
+        for model_name, model_config in ENABLED_MODELS.items():
             print(f"\n--- Rodando Modelo: {model_name} ---")
             params = {
                 "train_df": train_df, "test_df": test_df,
-                "dataset_name": dataset_name, "target_column": target_column,
-                "seasonality": dataset_config["seasonality"],
-                "freq": dataset_config["freq"], **model_config.get("params", {})}
+                "dataset_name": dataset_name, **dataset_config, **model_config.get("params", {})}
+            del params['fetch_func'] # Remove a função para não ser passada ao modelo
             
             try:
                 forecast_values = model_config["func"](**params)
@@ -199,7 +208,7 @@ def run():
         all_dataset_results.append({
             "dataset_name": dataset_name,
             "forecast_horizon": dataset_config["forecast_horizon"],
-            "model_names": list(EXPERIMENTS.keys())
+            "model_names": list(ENABLED_MODELS.keys())
         })
 
     print("\n\n[ETAPA FINAL] Gerando relatório consolidado para todos os datasets...")

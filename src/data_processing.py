@@ -2,6 +2,7 @@
 import pandas as pd
 from pathlib import Path
 import urllib.request
+import statsmodels.api as sm 
 
 def fetch_airline_data(data_dir="data"):
     """
@@ -62,6 +63,38 @@ def fetch_daily_births_data(data_dir="data"):
         return str(raw_path)
     except Exception as e:
         raise ConnectionError(f"Falha ao baixar ou processar o arquivo 'daily_births.csv'. Erro: {e}")
+
+def fetch_sunspots_data(data_dir="data"):
+    """
+    Garante que os dados de Sunspots existam localmente, carregando-os
+    diretamente da biblioteca statsmodels para maior robustez.
+    Retorna o caminho para o arquivo CSV formatado.
+    """
+    raw_path = Path(data_dir) / "raw" / "sunspots.csv"
+    raw_path.parent.mkdir(parents=True, exist_ok=True)
+    
+    if not raw_path.exists():
+        print("Dados de Sunspots não encontrados localmente. Carregando via statsmodels...")
+        
+        # Carrega o dataset diretamente da biblioteca statsmodels
+        data = sm.datasets.sunspots.load_pandas().data
+        
+        # O 'YEAR' vem como índice, então o transformamos em uma coluna
+        data.reset_index(inplace=True)
+        
+        # Renomeia as colunas para o padrão do nosso projeto ('ds', 'value')
+        data.rename(columns={'YEAR': 'ds', 'SUNACTIVITY': 'value'}, inplace=True)
+        
+        # Converte a coluna de ano para o formato datetime
+        data['ds'] = pd.to_datetime(data['ds'], format='%Y')
+        
+        # Salva o arquivo formatado localmente
+        data.to_csv(raw_path, index=False)
+        print(f"Dataset 'sunspots.csv' criado e formatado com sucesso em {raw_path}")
+    else:
+        print(f"Utilizando o dataset local 'sunspots.csv' encontrado em: {raw_path}")
+        
+    return str(raw_path)
 
 
 def process_data_fixed_origin(dataset_name, raw_path, processed_dir, forecast_horizon):
