@@ -20,14 +20,19 @@ Inspirado por pesquisas recentes, este projeto busca enfrentar os seguintes desa
     * Uso de particionamento de dados via **origem fixa** para os experimentos, com um framework que pode ser estendido para validação cruzada no futuro.
 
 ## Estrutura do Projeto
-
+```
 /forecasting/
 |
 |-- config/               # Contém os arquivos de configuração dos experimentos
 |   |-- datasets_config.json
-|   -- models_config.json | |-- data/                 # Armazena os datasets brutos e processados |-- results/              # Contém todas as saídas: previsões, métricas e relatórios |   |-- forecasts/ |   |-- metrics/ |   -- reports/
+|   |-- models_config.json |
+|-- data/                 # Armazena os datasets brutos e processados
+|-- results/              # Contém todas as saídas: previsões, métricas e relatórios
+|    |-- forecasts/
+|        |-- metrics/ 
+|        | -- reports/
 |-- scripts
-    | -- setup_venv.sh    # Script para criar o ambiente virtual -- 
+|   |-- setup_venv.sh    # Script para criar o ambiente virtual -- 
 |-- src/                  # Contém o código fonte modularizado
 |   |-- init.py
 |   |-- data_processing.py
@@ -36,6 +41,7 @@ Inspirado por pesquisas recentes, este projeto busca enfrentar os seguintes desa
 |-- run_experiments.py    # Orquestrador principal da pipeline de experimentos
 |-- generate_report.py    # Script para gerar o relatório final a partir de resultados existentes
 |-- requirements.txt      # Lista de dependências do Python
+```
 
 ## Como Executar os Experimentos
 
