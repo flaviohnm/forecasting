@@ -17,7 +17,7 @@ def train_and_forecast_naive(train_df: pd.DataFrame, test_df: pd.DataFrame, targ
     return np.full(len(test_df), fill_value=last_value)
 
 def train_and_forecast_arima(train_df: pd.DataFrame, test_df: pd.DataFrame, seasonality: int, target_column: str, **kwargs):
-    model = pm.auto_arima(train_df[target_column], m=seasonality, seasonal=True, trace=False, suppress_warnings=True, error_action='ignore')
+    model = pm.auto_arima(train_df[target_column], m=seasonality, seasonal=True, trace=True, suppress_warnings=True, error_action='ignore')
     return model.predict(n_periods=len(test_df)).values
 
 def train_and_forecast_ets(train_df: pd.DataFrame, test_df: pd.DataFrame, seasonality: int, target_column: str, freq: str, **kwargs):

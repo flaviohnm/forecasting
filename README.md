@@ -1,6 +1,6 @@
 # Projeto de Benchmark de Modelos de Forecasting para Séries Temporais
 
-Este projeto é parte de uma pesquisa de mestrado com o objetivo de implementar e avaliar o desempenho de modelos de previsão de séries temporais, com foco em arquiteturas híbridas e estratégias de previsão multi-step ahead, conforme as melhores práticas da literatura científica.
+Este projeto é parte de uma pesquisa de mestrado com o objetivo de implementar e avaliar o desempenho de diversos modelos de previsão de séries temporais, com foco em arquiteturas híbridas e estratégias de previsão multi-step ahead, conforme as melhores práticas da literatura científica.
 
 ## O Desafio do Projeto
 
@@ -8,69 +8,78 @@ A previsão de múltiplos passos no futuro (*multi-step ahead forecasting*) é u
 
 Inspirado por pesquisas recentes, este projeto busca enfrentar os seguintes desafios:
 
-1.  **Implementação de Modelos Híbridos:** A literatura sugere que a combinação de modelos lineares (como o ARIMA, que captura bem tendências) e modelos não-lineares de deep learning (como o N-BEATS, que modela padrões complexos) pode gerar previsões mais acuradas. Nosso principal desafio é implementar e validar um modelo híbrido que utiliza ARIMA para a componente linear e N-BEATS para modelar os resíduos.
+1.  **Implementação de Modelos Híbridos:** A literatura sugere que a combinação de modelos lineares (como o ARIMA, que captura bem tendências) e modelos não-lineares de deep learning (como N-BEATS e N-HiTS, que modelam padrões complexos) pode gerar previsões mais acuradas. O pipeline implementa e valida essa abordagem, modelando a série original com um modelo linear e os seus resíduos com um modelo de deep learning.
 
-2.  **Comparação de Estratégias de Previsão:** A forma como a previsão multi-step é gerada (a "estratégia") impacta significativamente o resultado. Com base nos artigos de referência, este projeto irá comparar:
-    * **Modelos Puros:** ARIMA (estratégia recursiva) e N-BEATS (estratégia direta).
-    * **Modelos Híbridos:** Uma implementação fiel do sistema **Híbrido Recursivo-Direto** (proposto por Duarte et al., 2024) e uma adaptação para a estratégia **Híbrido MIMO**, que segundo Taieb et al. (2011), tende a ter um desempenho superior.
+2.  **Comparação de Estratégias e Modelos:** O pipeline foi projetado para comparar de forma justa o desempenho de diferentes classes de modelos e estratégias de previsão multi-step, incluindo:
+    * **Modelos Estatísticos Clássicos:** ARIMA e ETS.
+    * **Modelos de Deep Learning:** N-BEATS, N-HiTS, LSTM, MLP, entre outros, usando estratégias *Direct* e *MIMO*.
+    * **Modelos Híbridos:** Combinações de ARIMA com os principais modelos de Deep Learning.
 
-3.  **Benchmark e Avaliação Robusta:** A avaliação de modelos de forecasting é repleta de armadilhas. Para garantir la validade científica dos resultados, este projeto adota as melhores práticas recomendadas:
-    * Uso de métricas escaladas como **MASE** (Mean Absolute Scaled Error), que permitem uma comparação justa entre modelos.
-    * Uso de particionamento de dados via **origem fixa** para os experimentos iniciais, com planos de evoluir para **validação cruzada de origem rolante** (`tsCV`) para uma avaliação mais robusta.
+3.  **Benchmark e Avaliação Robusta:** Para garantir a validade científica dos resultados, este projeto adota as melhores práticas recomendadas:
+    * Uso de métricas escaladas como **MASE** (Mean Absolute Scaled Error), que permitem uma comparação justa entre modelos em diferentes séries temporais.
+    * Uso de particionamento de dados via **origem fixa** para os experimentos, com um framework que pode ser estendido para validação cruzada no futuro.
+
+## Estrutura do Projeto
+Compreendido. Peço desculpas pela confusão. Segue o código Markdown bruto para o seu arquivo README.md, pronto para ser copiado.
+
+Markdown
+
+# Projeto de Benchmark de Modelos de Forecasting para Séries Temporais
+
+Este projeto é parte de uma pesquisa de mestrado com o objetivo de implementar e avaliar o desempenho de diversos modelos de previsão de séries temporais, com foco em arquiteturas híbridas e estratégias de previsão multi-step ahead, conforme as melhores práticas da literatura científica.
+
+## O Desafio do Projeto
+
+A previsão de múltiplos passos no futuro (*multi-step ahead forecasting*) é um desafio em aberto na área de séries temporais. Modelos simples frequentemente falham em capturar as complexidades presentes em dados do mundo real, que podem incluir múltiplas sazonalidades, tendências e estruturas não-lineares.
+
+Inspirado por pesquisas recentes, este projeto busca enfrentar os seguintes desafios:
+
+1.  **Implementação de Modelos Híbridos:** A literatura sugere que a combinação de modelos lineares (como o ARIMA, que captura bem tendências) e modelos não-lineares de deep learning (como N-BEATS e N-HiTS, que modelam padrões complexos) pode gerar previsões mais acuradas. O pipeline implementa e valida essa abordagem, modelando a série original com um modelo linear e os seus resíduos com um modelo de deep learning.
+
+2.  **Comparação de Estratégias e Modelos:** O pipeline foi projetado para comparar de forma justa o desempenho de diferentes classes de modelos e estratégias de previsão multi-step, incluindo:
+    * **Modelos Estatísticos Clássicos:** ARIMA e ETS.
+    * **Modelos de Deep Learning:** N-BEATS, N-HiTS, LSTM, MLP, entre outros, usando estratégias *Direct* e *MIMO*.
+    * **Modelos Híbridos:** Combinações de ARIMA com os principais modelos de Deep Learning.
+
+3.  **Benchmark e Avaliação Robusta:** Para garantir a validade científica dos resultados, este projeto adota as melhores práticas recomendadas:
+    * Uso de métricas escaladas como **MASE** (Mean Absolute Scaled Error), que permitem uma comparação justa entre modelos em diferentes séries temporais.
+    * Uso de particionamento de dados via **origem fixa** para os experimentos, com um framework que pode ser estendido para validação cruzada no futuro.
 
 ## Estrutura do Projeto
 
-```
 /forecasting/
 |
-|-- data/                 # Armazena os datasets brutos e processados
-|-- results/              # Contém todas as saídas: modelos, previsões, métricas e relatórios
-|   |-- forecasts/
-|   |-- metrics/
-|   |-- models/
-|   `-- reports/
-|
+|-- config/               # Contém os arquivos de configuração dos experimentos
+|   |-- datasets_config.json
+|   -- models_config.json | |-- data/                 # Armazena os datasets brutos e processados |-- results/              # Contém todas as saídas: previsões, métricas e relatórios |   |-- forecasts/ |   |-- metrics/ |   -- reports/
+|-- scripts
+    | -- setup_venv.sh    # Script para criar o ambiente virtual -- 
 |-- src/                  # Contém o código fonte modularizado
-|   |-- __init__.py
-|   |-- data_processing.py # Funções para baixar e processar dados
-|   |-- models.py          # Funções de treinamento e previsão dos modelos
-|   `-- reporting.py       # Funções para avaliação e geração de relatórios
-|
-|-- main.py               # Orquestrador principal da pipeline de experimentos
+|   |-- init.py
+|   |-- data_processing.py
+|   |-- models.py
+|   |-- reporting.py |
+|-- run_experiments.py    # Orquestrador principal da pipeline de experimentos
+|-- generate_report.py    # Script para gerar o relatório final a partir de resultados existentes
 |-- requirements.txt      # Lista de dependências do Python
-|-- clean_venv.sh         # Script para limpar o ambiente virtual
-|-- setup_venv.sh         # Script para criar o ambiente virtual e instalar dependências
-`-- run_experiment.sh     # Script para limpar o terminal e executar a pipeline
-```
 
 ## Como Executar os Experimentos
 
-Este projeto foi configurado para ser executado localmente em um ambiente Python isolado.
+Este projeto foi configurado para ser executado localmente em um ambiente Python isolado, com controle total sobre os experimentos através de arquivos de configuração.
 
-### 1. Pré-requisitos
+### 1. Configuração dos Experimentos (O Principal Painel de Controle)
+Toda a execução é controlada por dois arquivos na pasta `config/`:
+
+* **`config/datasets_config.json`**: Use este arquivo para habilitar (`"enabled": true`) ou desabilitar (`"enabled": false`) os datasets que você deseja incluir na rodada de testes.
+* **`config/models_config.json`**: Use este arquivo para habilitar ou desabilitar modelos específicos e para ajustar seus hiperparâmetros (`max_steps`, `learning_rate`, etc.).
+
+### 2. Pré-requisitos
 * Python 3.11 instalado na sua máquina.
 * Um terminal que suporte scripts shell (como Git Bash no Windows, ou o terminal padrão do macOS/Linux).
 
-### 2. Configuração do Ambiente (Executar apenas uma vez)
+### 3. Configuração do Ambiente (Executar apenas uma vez)
 Este script irá criar o ambiente virtual e instalar todas as bibliotecas necessárias listadas no `requirements.txt`.
 
 ```bash
 ./setup_venv.sh
 ```
-
-### 3. Execução da Pipeline
-Para rodar a pipeline completa (download de dados, pré-processamento, treinamento de todos os modelos e avaliação), execute o seguinte script:
-
-```bash
-./run_experiment.sh
-```
-O script irá limpar o terminal, ativar o ambiente virtual e iniciar a execução do `main.py`.
-
-### 4. Configuração dos Experimentos
-Todos os parâmetros dos experimentos (dataset a ser usado, horizonte de previsão, número de épocas, etc.) podem ser facilmente ajustados no "Painel de Controle" no topo do arquivo `main.py`.
-
-## Próximos Passos
-- [ ] Implementar a etapa final de `generate_final_report` para consolidar as métricas de todos os modelos.
-- [ ] Adicionar testes de significância estatística (ex: Teste de Diebold-Mariano) ao relatório final.
-- [ ] Expandir a matriz de experimentos para incluir mais datasets e modelos.
-- [ ] (Opcional) Migrar a pipeline local para um orquestrador como o Airflow para otimizar a execução paralela em larga escala.
