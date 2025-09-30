@@ -1,23 +1,23 @@
-# /forecasting/requirements.txt (VERSÃO FINAL E COMPLETA)
+# Manipulação de dados e computação numérica
+numpy==1.24.3
+pandas==2.0.3
+scipy==1.11.2
 
-# --- Core de Análise de Dados e ML ---
-pandas==2.2.2
-scikit-learn==1.5.0
-numpy==1.26.4
-joblib==1.4.2
+# Modelos estatísticos e de séries temporais
+statsmodels==0.13.5
 
-# --- Modelos Estatísticos ---
-statsmodels==0.14.2 
-scipy==1.12.0
-pmdarima==2.0.4
+# Deep Learning
+tensorflow==2.15.0
 
-# --- Modelos de Deep Learning para Séries Temporais ---
-# Instalando com [auto] para garantir todas as dependências de todos os modelos
-neuralforecast==3.0.2 
-pytorch-lightning==2.2.5
-torch==2.3.1
+# Utilitários de Machine Learning e métricas
+scikit-learn==1.3.0
 
-# --- Visualização e Relatórios ---
-matplotlib==3.9.0
-seaborn==0.13.2
-tabulate==0.9.0
+# Leitura de arquivos de configuração e CLI
+PyYAML==6.0.1
+
+# Salvamento de modelos
+joblib==1.4.0
+
+# Plotagem (opcional, mas útil para análise)
+matplotlib==3.8.2
+tabulate 

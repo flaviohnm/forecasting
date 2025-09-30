@@ -1,0 +1,34 @@
+# Salve este conteúdo no arquivo: configs/main_config.yaml
+
+# Caminhos principais do projeto
+data_paths:
+  raw: "./data/raw/"
+  processed: "./data/processed/"
+
+results_paths:
+  metrics: "./results/metrics/"
+  plots: "./results/plots/"
+
+models_path: "saved_models/"
+
+# Lista de datasets disponíveis
+datasets:
+  - name: "airline"
+    filename: "airline_passengers.csv"
+    url: "https://raw.githubusercontent.com/jbrownlee/Datasets/refs/heads/master/airline-passengers.csv"
+    target_column: "Passengers"
+    date_column: "Month"
+    split_date: "1958-01-01"
+    log_transform: True
+    forecast_horizon: 10 # Horizonte específico do dataset
+    seasonal_period: 12  # Período sazonal (m)
+
+  - name: "sunspot"
+    filename: "sunspots.csv"
+    url: "https://raw.githubusercontent.com/jbrownlee/Datasets/master/monthly-sunspots.csv"
+    target_column: "Sunspots"
+    date_column: "Month"
+    split_date: "1950-01-01"
+    log_transform: False
+    forecast_horizon: 10
+    seasonal_period: 12 # Sem sazonalidade clara

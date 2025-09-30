@@ -1,0 +1,61 @@
+
+strategies:
+  full_hybrid_comparison:
+    - model_name: "base_arima"
+      model_type: "ARIMA"
+      arima_params:
+        start_p: 1
+        start_q: 1
+        max_p: 5
+        max_q: 5
+        d: 1
+        trace: True
+
+    - model_name: "hybrid_arima_nbeats"
+      model_type: "Hybrid"
+      depends_on: "base_arima"
+      nbeats_params:
+        input_lags: 24
+        epochs: 100
+        batch_size: 16
+        learning_rate: 0.001
+        n_neurons: [128, 128]
+
+  arima_only:
+    - model_name: "standalone_arima"
+      model_type: "ARIMA"
+      arima_params:
+        start_p: 1
+        start_q: 1
+        max_p: 5
+        max_q: 5
+        d: 1
+        trace: True
+
+  full_comparison:
+    - model_name: "base_arima"
+      model_type: "ARIMA"
+      arima_params:
+        start_p: 1
+        start_q: 1
+        max_p: 5
+        max_q: 5
+        d: 1
+        trace: True
+
+    - model_name: "standalone_ets"
+      model_type: "ETS"
+      ets_params:
+        trend: "add"
+        seasonal: "add"
+        damped_trend: true
+
+    - model_name: "hybrid_arima_nbeats"
+      model_type: "Hybrid"
+      depends_on: "base_arima"
+      nbeats_params:
+        input_lags: 24
+        epochs: 100
+        batch_size: 16
+        learning_rate: 0.001
+        n_neurons: [128, 128]
