@@ -11,7 +11,7 @@ import yaml
 from src.data_management import downloader
 from src.pipelines import train_pipeline, evaluate_pipeline
 from src.visualization import plotter
-# NOVO IMPORT para o módulo de relatórios
+from src.analysis import statistical_tests
 from src.reporting import reporter
 
 
@@ -89,18 +89,17 @@ def main():
     parser = argparse.ArgumentParser(
         description="Pipeline de Forecasting para Mestrado.")
 
-    # MUDANÇA: Adicionado 'report' às opções de --step
     parser.add_argument('--step',
                         default='full_run',
                         choices=[
                             'full_run', 'download', 'train', 'evaluate',
-                            'plot', 'report'
+                            'plot', 'report', 'testes'
                         ],
                         help="Etapa a executar. Padrão: 'full_run'.")
     parser.add_argument(
         '--strategy',
-        default='full_hybrid_comparison',
-        help="Estratégia a ser executada. Padrão: 'full_hybrid_comparison'.")
+        default='full_comparison',
+        help="Estratégia a ser executada. Padrão: 'full_comparison'.")
     parser.add_argument('--dataset',
                         nargs='+',
                         default=['all'],
@@ -124,15 +123,26 @@ def main():
     os.makedirs(main_config['results_paths']['metrics'], exist_ok=True)
     os.makedirs(main_config['results_paths']['plots'], exist_ok=True)
     os.makedirs(main_config['models_path'], exist_ok=True)
-    # MUDANÇA: Adicionada a criação da pasta de relatórios
     os.makedirs("reports", exist_ok=True)
+    os.makedirs(os.path.join("results", "statistical_tests"), exist_ok=True)
 
     # Lógica principal de execução
     if args.step == 'full_run':
         print("--- INICIANDO EXECUÇÃO COMPLETA DA PIPELINE ---")
+
+        # Etapa 1: Download
         print("\n" + "=" * 50 + "\n[ETAPA DE DOWNLOAD]\n" + "=" * 50)
         downloader.download_all_datasets(main_config)
 
+        # MUDANÇA: Etapa de Testes Estatísticos adicionada ao full_run
+        print("\n" + "=" * 50 + "\n[ETAPA DE ANÁLISE ESTATÍSTICA]\n" +
+              "=" * 50)
+        available_datasets = {ds['name']: ds for ds in main_config['datasets']}
+        datasets_to_run_tests = list(
+            available_datasets.values())  # Roda para todos os datasets
+        statistical_tests.run_tests(main_config, datasets_to_run_tests)
+
+        # Etapas seguintes...
         executions = get_executions_to_run(main_config, model_params, args)
 
         print("\n" + "=" * 50 + "\n[ETAPA DE TREINAMENTO]\n" + "=" * 50)
@@ -144,7 +154,6 @@ def main():
         print("\n" + "=" * 50 + "\n[ETAPA DE VISUALIZAÇÃO]\n" + "=" * 50)
         plotter.generate_plots(main_config, executions)
 
-        # MUDANÇA: Adicionada a etapa de relatório ao final da execução completa
         print("\n" + "=" * 50 + "\n[ETAPA DE RELATÓRIO]\n" + "=" * 50)
         reporter.generate_report(main_config, model_params, args)
 
@@ -162,10 +171,29 @@ def main():
         executions = get_executions_to_run(main_config, model_params, args)
         plotter.generate_plots(main_config, executions)
 
-    # MUDANÇA: Novo bloco para executar a etapa de relatório de forma independente
     elif args.step == 'report':
         print("--- EXECUTANDO APENAS A ETAPA DE RELATÓRIO ---")
         reporter.generate_report(main_config, model_params, args)
+
+    elif args.step == 'testes':
+        print("--- EXECUTANDO APENAS A ETAPA DE ANÁLISE ESTATÍSTICA ---")
+
+        available_datasets = {ds['name']: ds for ds in main_config['datasets']}
+        datasets_to_run = []
+        if 'all' in args.dataset:
+            datasets_to_run = list(available_datasets.values())
+        else:
+            datasets_to_run = [
+                available_datasets[name] for name in args.dataset
+                if name in available_datasets
+            ]
+            if not datasets_to_run:
+                print(
+                    f"Nenhum dataset correspondente a '{args.dataset}' foi encontrado."
+                )
+
+        if datasets_to_run:
+            statistical_tests.run_tests(main_config, datasets_to_run)
 
 
 if __name__ == '__main__':

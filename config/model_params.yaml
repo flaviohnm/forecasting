@@ -1,20 +1,86 @@
+# File: config/model_params.yaml
 
 strategies:
-  full_hybrid_comparison:
+  # Estratégia Principal: Compara todos os modelos
+  full_comparison:
     - model_name: "base_arima"
       model_type: "ARIMA"
-      arima_params:
+      arima_params: 
         start_p: 1
         start_q: 1
         max_p: 5
         max_q: 5
         d: 1
-        trace: True
+        trace: false
 
-    - model_name: "hybrid_arima_nbeats"
-      model_type: "Hybrid"
+    - model_name: "standalone_ets"
+      model_type: "ETS"
+      ets_params: 
+        trend: 'add'
+        seasonal: 'add'
+        damped_trend: true
+
+    - model_name: "standalone_lstm"
+      model_type: "LSTM"
+      lstm_params: 
+        input_lags: 24
+        epochs: 100
+        batch_size: 16
+        learning_rate: 0.001
+        n_neurons: [50]
+
+    - model_name: "standalone_transformer"
+      model_type: "Transformer"
+      transformer_params:
+        input_size: 24
+        n_head: 4
+        hidden_size: 64
+        max_steps: 100
+
+    - model_name: "standalone_nhits"
+      model_type: "NHiTS"
+      nhits_params:
+        input_size: 24
+        n_blocks: [1, 1, 1]
+        mlp_units: [[256, 256], [256, 256], [256, 256]]
+        max_steps: 100
+
+    - model_name: "hybrid_arima_nbeats_direct"
+      model_type: "Hybrid_Direct"
       depends_on: "base_arima"
-      nbeats_params:
+      nbeats_params: 
+        input_lags: 24
+        epochs: 100
+        batch_size: 16
+        learning_rate: 0.001
+        n_neurons: [128, 128]
+
+    - model_name: "hybrid_arima_nbeats_mimo"
+      model_type: "Hybrid_MIMO"
+      depends_on: "base_arima"
+      nbeats_params: 
+        input_lags: 24
+        epochs: 100
+        batch_size: 16
+        learning_rate: 0.001
+        n_neurons: [128, 128]
+
+  # Estratégia Híbrida Original (agora usando o tipo 'Hybrid_Direct')
+  full_hybrid_comparison:
+    - model_name: "base_arima"
+      model_type: "ARIMA"
+      arima_params: 
+        start_p: 1
+        start_q: 1
+        max_p: 5
+        max_q: 5
+        d: 1
+        trace: false
+
+    - model_name: "hybrid_arima_nbeats_direct"
+      model_type: "Hybrid_Direct"
+      depends_on: "base_arima"
+      nbeats_params: 
         input_lags: 24
         epochs: 100
         batch_size: 16
@@ -24,38 +90,10 @@ strategies:
   arima_only:
     - model_name: "standalone_arima"
       model_type: "ARIMA"
-      arima_params:
+      arima_params: 
         start_p: 1
         start_q: 1
         max_p: 5
         max_q: 5
         d: 1
-        trace: True
-
-  full_comparison:
-    - model_name: "base_arima"
-      model_type: "ARIMA"
-      arima_params:
-        start_p: 1
-        start_q: 1
-        max_p: 5
-        max_q: 5
-        d: 1
-        trace: True
-
-    - model_name: "standalone_ets"
-      model_type: "ETS"
-      ets_params:
-        trend: "add"
-        seasonal: "add"
-        damped_trend: true
-
-    - model_name: "hybrid_arima_nbeats"
-      model_type: "Hybrid"
-      depends_on: "base_arima"
-      nbeats_params:
-        input_lags: 24
-        epochs: 100
-        batch_size: 16
-        learning_rate: 0.001
-        n_neurons: [128, 128]
+        trace: false
