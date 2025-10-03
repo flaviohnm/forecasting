@@ -1,7 +1,7 @@
 # File: config/model_params.yaml
 
 strategies:
-  # Estratégia Principal: Compara todos os modelos
+  # --- Estratégia Principal: Compara todos os modelos ---
   full_comparison:
     - model_name: "base_arima"
       model_type: "ARIMA"
@@ -65,7 +65,26 @@ strategies:
         learning_rate: 0.001
         n_neurons: [128, 128]
 
-  # Estratégia Híbrida Original (agora usando o tipo 'Hybrid_Direct')
+    - model_name: "hybrid_arima_nhits_direct"
+      model_type: "Hybrid_Direct_NHITS"
+      depends_on: "base_arima"
+      nhits_params:
+        input_size: 24
+        n_blocks: [1, 1, 1]
+        mlp_units: [[256, 256], [256, 256], [256, 256]]
+        max_steps: 100
+
+    - model_name: "hybrid_arima_nhits_mimo"
+      model_type: "Hybrid_MIMO_NHITS"
+      depends_on: "base_arima"
+      nhits_params:
+        input_size: 24
+        n_blocks: [1, 1, 1]
+        mlp_units: [[256, 256], [256, 256], [256, 256]]
+        max_steps: 100
+
+  # --- Outras Estratégias ---
+
   full_hybrid_comparison:
     - model_name: "base_arima"
       model_type: "ARIMA"

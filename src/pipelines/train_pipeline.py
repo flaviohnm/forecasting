@@ -43,21 +43,18 @@ def run(main_config: dict, model_conf: dict, dataset_conf: dict, execution_name:
                 model_builder=deep_learning_model.build_lstm_model, output_shape=1
             )
             
-    elif model_type in ['Transformer', 'NHiTS']:
-        print(f"INFO: Modelo {model_type} (NeuralForecast) não requer passo de treino separado.")
+    elif model_type in ['Transformer', 'NHiTS', 'Hybrid_Direct_NHITS', 'Hybrid_MIMO_NHITS']:
+        print(f"INFO: Modelo {model_type} não requer um passo de treino separado. O treino ocorrerá durante a avaliação.")
         pass
 
     elif model_type == 'Hybrid_Direct':
         dependency_name = model_conf.get('depends_on')
         arima_model_path = os.path.join(models_path, f"{dataset_conf['name']}_{dependency_name}.joblib")
-        print(f"Carregando ARIMA dependente de: {arima_model_path}")
         if not os.path.exists(arima_model_path): raise FileNotFoundError(f"Modelo ARIMA dependente não encontrado.")
         
         arima_instance = joblib.load(arima_model_path)
-        
         residuals_train = train_series - pd.Series(arima_instance.predict_in_sample(), index=train_series.index)
-        print("Resíduos do treino calculados.")
-
+        
         horizon = dataset_conf['forecast_horizon']
         input_lags = model_conf['nbeats_params']['input_lags']
         residual_datasets = preprocessing.create_direct_forecast_datasets(residuals_train, input_lags, horizon)
@@ -73,13 +70,10 @@ def run(main_config: dict, model_conf: dict, dataset_conf: dict, execution_name:
     elif model_type == 'Hybrid_MIMO':
         dependency_name = model_conf.get('depends_on')
         arima_model_path = os.path.join(models_path, f"{dataset_conf['name']}_{dependency_name}.joblib")
-        print(f"Carregando ARIMA dependente de: {arima_model_path}")
         if not os.path.exists(arima_model_path): raise FileNotFoundError(f"Modelo ARIMA dependente não encontrado.")
         
         arima_instance = joblib.load(arima_model_path)
-        
         residuals_train = train_series - pd.Series(arima_instance.predict_in_sample(), index=train_series.index)
-        print("Resíduos do treino calculados.")
 
         horizon = dataset_conf['forecast_horizon']
         input_lags = model_conf['nbeats_params']['input_lags']
@@ -91,6 +85,5 @@ def run(main_config: dict, model_conf: dict, dataset_conf: dict, execution_name:
             X_res, y_res, model_path, model_conf['nbeats_params'],
             model_builder=deep_learning_model.build_nbeats_mimo_model, output_shape=horizon
         )
-
     else:
         print(f"AVISO: Tipo de modelo '{model_type}' não possui lógica de treino definida.")
