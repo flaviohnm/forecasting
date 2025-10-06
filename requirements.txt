@@ -1,25 +1,26 @@
 # Data & Math
-numpy==1.24.4      # <-- VERSÃO AJUSTADA PARA COMPATIBILIDADE
+numpy==1.26.4
 pandas==2.2.2
-scipy==1.11.4
+scipy==1.13.1
 
 # Statistical Models
-statsmodels==0.13.5
+statsmodels==0.14.2
 pmdarima==2.0.4
 
 # Deep Learning - Keras Backend
-tensorflow==2.15.0
+tensorflow==2.16.1
 
-# Deep Learning - PyTorch Backend (for NeuralForecast)
+# Deep Learning - PyTorch Backend (NeuralForecast)
 torch==2.3.1
 neuralforecast==1.7.2
 statsforecast==1.7.5
-numba==0.57.1
+numba==0.59.1
+pytorch-lightning==2.3.0
 
 # Utilities
-scikit-learn==1.4.2
+scikit-learn==1.5.0
 PyYAML==6.0.1
-joblib==1.4.0
-matplotlib==3.8.4
+joblib==1.4.2
+matplotlib==3.9.0
 tabulate==0.9.0
 requests==2.31.0

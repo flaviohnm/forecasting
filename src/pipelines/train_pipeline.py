@@ -43,8 +43,8 @@ def run(main_config: dict, model_conf: dict, dataset_conf: dict, execution_name:
                 model_builder=deep_learning_model.build_lstm_model, output_shape=1
             )
             
-    elif model_type in ['Transformer', 'NHiTS', 'Hybrid_Direct_NHITS', 'Hybrid_MIMO_NHITS']:
-        print(f"INFO: Modelo {model_type} não requer um passo de treino separado. O treino ocorrerá durante a avaliação.")
+    elif model_type in ['iTransformer', 'NHiTS', 'Hybrid_Direct_NHITS', 'Hybrid_MIMO_NHITS']:
+        print(f"INFO: Modelo {model_type} (baseado em NeuralForecast) não requer um passo de treino separado. O treino ocorrerá durante a avaliação.")
         pass
 
     elif model_type == 'Hybrid_Direct':

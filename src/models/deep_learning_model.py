@@ -7,11 +7,11 @@ from tensorflow.keras.optimizers import Adam
 import os
 import pandas as pd
 import numpy as np
+import pytorch_lightning as pl
 
 from neuralforecast import NeuralForecast
 from neuralforecast.models import iTransformer, NHITS
 
-# --- Modelos baseados em Keras (N-BEATS, LSTM) ---
 
 def build_nbeats_model(input_shape: tuple, output_shape: int, n_neurons: list, learning_rate: float):
     """Constrói um modelo N-BEATS com uma única saída (para abordagem Direta)."""
@@ -92,9 +92,10 @@ def load_and_predict_keras_mimo(model_path: str, input_data):
 
 # --- Modelos baseados em NeuralForecast ---
 
-def train_and_predict_neuralforecast(train_series: pd.Series, horizon: int, model_class, model_params: dict):
+def train_and_predict_neuralforecast(train_series: pd.Series, horizon: int, model_class, model_configs: dict):
     """
-    Função genérica para treinar e prever com modelos da NeuralForecast.
+    Função genérica para treinar e prever com modelos da NeuralForecast,
+    criando manualmente o Trainer para contornar bugs da biblioteca.
     """
     print(f"Treinando e prevendo com {model_class.__name__} via NeuralForecast...")
     
@@ -102,9 +103,21 @@ def train_and_predict_neuralforecast(train_series: pd.Series, horizon: int, mode
     df = df.rename(columns={df.columns[0]: 'ds'})
     df['unique_id'] = 'series_1'
     
-    model = model_class(h=horizon, **model_params)
+    # --- LÓGICA CORRIGIDA E FINAL ---
+    # 1. Separa os parâmetros do modelo e do treinador
+    model_kwargs = model_configs.get('model_kwargs', {})
+    trainer_kwargs = model_configs.get('trainer_kwargs', {})
+
+    # 2. Cria o objeto Trainer manualmente com seus parâmetros
+    trainer = pl.Trainer(**trainer_kwargs)
+
+    # 3. Instancia o modelo, passando o trainer manualmente para ele
+    model = model_class(h=horizon, trainer=trainer, **model_kwargs)
     
+    # 4. Instancia o NeuralForecast
     nf = NeuralForecast(models=[model], freq=pd.infer_freq(train_series.index))
+    # --- FIM DA CORREÇÃO ---
+
     nf.fit(df=df)
     
     forecast_df = nf.predict()
