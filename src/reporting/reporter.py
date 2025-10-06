@@ -51,7 +51,7 @@ def generate_report(main_config: dict, model_params: dict, args: argparse.Namesp
         execution_name = row['execution_name']
         plot_filename = f"plot_{execution_name}.png"
         # O caminho no markdown deve ser relativo à localização do arquivo .md
-        relative_plot_path = os.path.join("..", plots_path, plot_filename) 
+        relative_plot_path = os.path.join("../", plots_path, plot_filename) 
 
         report_content.append(f"### Execução: {execution_name}\n")
         

@@ -26,6 +26,7 @@ data/
 
 # Ignorar todos os resultados gerados pela pipeline
 # (modelos, previsões, métricas e relatórios)
+lightning_logs/
 results/
 saved_models/
 reports/

@@ -2,12 +2,12 @@
 
 # Caminhos principais do projeto
 data_paths:
-  raw: "./data/raw/"
-  processed: "./data/processed/"
+  raw: "data/raw/"
+  processed: "data/processed/"
 
 results_paths:
-  metrics: "./results/metrics/"
-  plots: "./results/plots/"
+  metrics: "results/metrics/"
+  plots: "results/plots/"
 
 models_path: "saved_models/"
 

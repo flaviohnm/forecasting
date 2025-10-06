@@ -8,22 +8,11 @@ import os
 import pandas as pd
 import numpy as np
 import pytorch_lightning as pl
+import time
 
 from neuralforecast import NeuralForecast
-from neuralforecast.models import iTransformer, NHITS
+from neuralforecast.models import iTransformer, NHITS, NBEATS
 
-
-def build_nbeats_model(input_shape: tuple, output_shape: int, n_neurons: list, learning_rate: float):
-    """Constrói um modelo N-BEATS com uma única saída (para abordagem Direta)."""
-    model = Sequential()
-    model.add(Dense(n_neurons[0], activation='relu', input_shape=input_shape))
-    for units in n_neurons[1:]:
-        model.add(Dense(units, activation='relu'))
-    model.add(Dense(output_shape))
-    
-    optimizer = Adam(learning_rate=learning_rate)
-    model.compile(optimizer=optimizer, loss='mean_squared_error')
-    return model
 
 def build_lstm_model(input_shape: tuple, output_shape: int, n_neurons: list, learning_rate: float):
     """Constrói um modelo LSTM simples com Keras."""
@@ -37,20 +26,9 @@ def build_lstm_model(input_shape: tuple, output_shape: int, n_neurons: list, lea
     model.compile(optimizer=optimizer, loss='mean_squared_error')
     return model
 
-def build_nbeats_mimo_model(input_shape: tuple, output_shape: int, n_neurons: list, learning_rate: float):
-    """Constrói um modelo N-BEATS com múltiplas saídas para a abordagem MIMO."""
-    model = Sequential()
-    model.add(Dense(n_neurons[0], activation='relu', input_shape=input_shape))
-    for units in n_neurons[1:]:
-        model.add(Dense(units, activation='relu'))
-    model.add(Dense(output_shape)) # Camada de saída com 'output_shape' neurônios
-    
-    optimizer = Adam(learning_rate=learning_rate)
-    model.compile(optimizer=optimizer, loss='mean_squared_error')
-    return model
-
 def train_and_save_keras_model(X_train, y_train, model_path: str, model_params: dict, model_builder, output_shape=1):
     """Função genérica para treinar e salvar modelos Keras."""
+    # ... (código sem alterações)
     print(f"Treinando modelo Keras para {os.path.basename(model_path)}...")
     
     if model_builder == build_lstm_model:
@@ -71,6 +49,7 @@ def train_and_save_keras_model(X_train, y_train, model_path: str, model_params: 
 
 def load_and_predict_keras_direct(model_path: str, input_data, is_lstm: bool):
     """Carrega um modelo Keras de saída única e faz uma previsão."""
+    # ... (código sem alterações)
     if not os.path.exists(model_path): raise FileNotFoundError(f"Modelo não encontrado: {model_path}")
     model = load_model(model_path)
     
@@ -80,47 +59,81 @@ def load_and_predict_keras_direct(model_path: str, input_data, is_lstm: bool):
     prediction = model.predict(input_data, verbose=0)
     return prediction[0, 0]
 
-def load_and_predict_keras_mimo(model_path: str, input_data):
-    """Carrega um modelo Keras MIMO e retorna todas as previsões de uma vez."""
-    if not os.path.exists(model_path): raise FileNotFoundError(f"Modelo não encontrado: {model_path}")
-    model = load_model(model_path)
-
-    if input_data.ndim == 1: input_data = input_data.reshape(1, -1)
-        
-    prediction = model.predict(input_data, verbose=0)
-    return prediction.flatten()
-
 # --- Modelos baseados em NeuralForecast ---
 
 def train_and_predict_neuralforecast(train_series: pd.Series, horizon: int, model_class, model_configs: dict):
     """
-    Função genérica para treinar e prever com modelos da NeuralForecast,
-    criando manualmente o Trainer para contornar bugs da biblioteca.
+    Função genérica para treinar e prever com modelos da NeuralForecast (abordagem MIMO).
     """
-    print(f"Treinando e prevendo com {model_class.__name__} via NeuralForecast...")
+    print(f"Treinando e prevendo com {model_class.__name__} via NeuralForecast (MIMO)...")
     
     df = train_series.to_frame(name='y').reset_index()
     df = df.rename(columns={df.columns[0]: 'ds'})
     df['unique_id'] = 'series_1'
     
-    # --- LÓGICA CORRIGIDA E FINAL ---
-    # 1. Separa os parâmetros do modelo e do treinador
     model_kwargs = model_configs.get('model_kwargs', {})
     trainer_kwargs = model_configs.get('trainer_kwargs', {})
 
-    # 2. Cria o objeto Trainer manualmente com seus parâmetros
-    trainer = pl.Trainer(**trainer_kwargs)
-
-    # 3. Instancia o modelo, passando o trainer manualmente para ele
-    model = model_class(h=horizon, trainer=trainer, **model_kwargs)
+    combined_params = {**model_kwargs, **trainer_kwargs}
+    model = model_class(h=horizon, **combined_params)
     
-    # 4. Instancia o NeuralForecast
     nf = NeuralForecast(models=[model], freq=pd.infer_freq(train_series.index))
-    # --- FIM DA CORREÇÃO ---
-
     nf.fit(df=df)
     
     forecast_df = nf.predict()
     
     print("Previsão com NeuralForecast concluída.")
-    return forecast_df[model_class.__name__.upper()].values
+
+    # --- LÓGICA DE RETORNO CORRIGIDA E ROBUSTA ---
+    # Encontra o nome da coluna da previsão dinamicamente
+    cols = forecast_df.columns
+    model_col = [c for c in cols if c not in ['unique_id', 'ds']][0]
+    
+    return forecast_df[model_col].values
+
+def predict_residuals_direct_nf(residuals_train: pd.Series, horizon: int, input_lags: int, model_class, model_configs: dict):
+    """
+    Implementa a abordagem de previsão DIRETA para resíduos usando modelos da NeuralForecast.
+    """
+    print(f"Iniciando previsão direta com {model_class.__name__} para {horizon} passos...")
+    
+    model_kwargs = model_configs.get('model_kwargs', {}).copy()
+    trainer_kwargs = model_configs.get('trainer_kwargs', {})
+    
+    model_kwargs['input_size'] = input_lags
+    
+    combined_params = {**model_kwargs, **trainer_kwargs}
+    
+    all_predictions = []
+    
+    for h in range(1, horizon + 1):
+        start_time = time.time()
+        print(f"  - Treinando modelo especialista para o horizonte h={h}...")
+        
+        end_idx = len(residuals_train) - h
+        
+        df_h = pd.DataFrame({
+            'ds': residuals_train.index[:end_idx],
+            'y': residuals_train.values[h:]
+        })
+        df_h['unique_id'] = 'series_1'
+
+        model = model_class(h=1, **combined_params)
+        
+        nf = NeuralForecast(models=[model], freq=pd.infer_freq(residuals_train.index))
+        nf.fit(df=df_h)
+        
+        forecast = nf.predict()
+        
+        # --- LÓGICA DE RETORNO CORRIGIDA E ROBUSTA ---
+        # Encontra o nome da coluna da previsão dinamicamente
+        cols = forecast.columns
+        model_col = [c for c in cols if c not in ['unique_id', 'ds']][0]
+        
+        prediction_value = forecast[model_col].values[0]
+        all_predictions.append(prediction_value)
+        
+        end_time = time.time()
+        print(f"  - Concluído em {end_time - start_time:.2f}s. Previsão para h={h}: {prediction_value:.4f}")
+        
+    return np.array(all_predictions)

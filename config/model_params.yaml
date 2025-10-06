@@ -32,97 +32,65 @@ strategies:
     - model_name: "standalone_itransformer"
       model_type: "iTransformer"
       itransformer_params:
-        # Parâmetros que definem a ARQUITETURA do modelo
         model_kwargs:
-          input_size: 24
+          input_size: 10
           n_heads: 4
-          d_model: 64
           n_series: 1
-        # Parâmetros que controlam o PROCESSO de treino
         trainer_kwargs:
           max_steps: 100
 
     - model_name: "standalone_nhits"
       model_type: "NHiTS"
       nhits_params:
-        # Parâmetros da ARQUITETURA do modelo
         model_kwargs:
           input_size: 24
           n_blocks: [1, 1, 1]
           mlp_units: [[256, 256], [256, 256], [256, 256]]
-          n_series: 1
-        # Parâmetros do PROCESSO de treino
         trainer_kwargs:
           max_steps: 100
-
-    - model_name: "hybrid_arima_nbeats_direct"
-      model_type: "Hybrid_Direct"
-      depends_on: "base_arima"
-      nbeats_params:
-        input_lags: 10
-        epochs: 100
-        batch_size: 16
-        learning_rate: 0.001
-        n_neurons: [128, 128]
-
-    - model_name: "hybrid_arima_nbeats_mimo"
-      model_type: "Hybrid_MIMO"
-      depends_on: "base_arima"
-      nbeats_params:
-        input_lags: 10
-        epochs: 100
-        batch_size: 16
-        learning_rate: 0.001
-        n_neurons: [128, 128]
-
-    - model_name: "hybrid_arima_nhits_direct"
-      model_type: "Hybrid_Direct_NHITS"
-      depends_on: "base_arima"
-      nhits_params:
-        input_size: 10
-        n_blocks: [1, 1, 1]
-        mlp_units: [[256, 256], [256, 256], [256, 256]]
-        max_steps: 100
 
     - model_name: "hybrid_arima_nhits_mimo"
       model_type: "Hybrid_MIMO_NHITS"
       depends_on: "base_arima"
       nhits_params:
-        input_size: 10
-        n_blocks: [1, 1, 1]
-        mlp_units: [[256, 256], [256, 256], [256, 256]]
-        max_steps: 100
+        model_kwargs:
+          input_size: 10
+          n_blocks: [1, 1, 1]
+          mlp_units: [[256, 256], [256, 256], [256, 256]]
+        trainer_kwargs:
+          max_steps: 100
 
-  # --- Outras Estratégias ---
+    - model_name: "hybrid_arima_nhits_direct"
+      model_type: "Hybrid_Direct_NHITS"
+      depends_on: "base_arima"
+      nhits_params:
+        model_kwargs:
+          input_size: 10
+          n_blocks: [1, 1, 1]
+          mlp_units: [[256, 256], [256, 256], [256, 256]]
+        trainer_kwargs:
+          max_steps: 100
 
-  full_hybrid_comparison:
-    - model_name: "base_arima"
-      model_type: "ARIMA"
-      arima_params:
-        start_p: 1
-        start_q: 1
-        max_p: 5
-        max_q: 5
-        d: 1
-        trace: false
-
-    - model_name: "hybrid_arima_nbeats_direct"
-      model_type: "Hybrid_Direct"
+    - model_name: "hybrid_arima_nbeats_mimo_nf"
+      model_type: "Hybrid_MIMO_NBEATS_NF"
       depends_on: "base_arima"
       nbeats_params:
-        input_lags: 10
-        epochs: 100
-        batch_size: 16
-        learning_rate: 0.001
-        n_neurons: [128, 128]
+        model_kwargs:
+          input_size: 10
+          stack_types: ['identity', 'identity']
+          n_blocks: [3, 3]
+          n_polynomials: 2
+        trainer_kwargs:
+          max_steps: 100
 
-  arima_only:
-    - model_name: "standalone_arima"
-      model_type: "ARIMA"
-      arima_params:
-        start_p: 1
-        start_q: 1
-        max_p: 5
-        max_q: 5
-        d: 1
-        trace: false
+    - model_name: "hybrid_arima_nbeats_direct_nf"
+      model_type: "Hybrid_Direct_NBEATS_NF"
+      depends_on: "base_arima"
+      nbeats_params:
+        model_kwargs:
+          input_size: 10
+          stack_types: ['identity', 'identity']
+          n_blocks: [3, 3]
+          n_polynomials: 2
+        trainer_kwargs:
+          max_steps: 100

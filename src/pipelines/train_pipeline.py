@@ -43,47 +43,12 @@ def run(main_config: dict, model_conf: dict, dataset_conf: dict, execution_name:
                 model_builder=deep_learning_model.build_lstm_model, output_shape=1
             )
             
-    elif model_type in ['iTransformer', 'NHiTS', 'Hybrid_Direct_NHITS', 'Hybrid_MIMO_NHITS']:
+    elif model_type in [
+        'iTransformer', 'NHiTS', 'Hybrid_MIMO_NHITS', 'Hybrid_Direct_NHITS',
+        'Hybrid_MIMO_NBEATS_NF', 'Hybrid_Direct_NBEATS_NF'
+    ]:
         print(f"INFO: Modelo {model_type} (baseado em NeuralForecast) não requer um passo de treino separado. O treino ocorrerá durante a avaliação.")
         pass
 
-    elif model_type == 'Hybrid_Direct':
-        dependency_name = model_conf.get('depends_on')
-        arima_model_path = os.path.join(models_path, f"{dataset_conf['name']}_{dependency_name}.joblib")
-        if not os.path.exists(arima_model_path): raise FileNotFoundError(f"Modelo ARIMA dependente não encontrado.")
-        
-        arima_instance = joblib.load(arima_model_path)
-        residuals_train = train_series - pd.Series(arima_instance.predict_in_sample(), index=train_series.index)
-        
-        horizon = dataset_conf['forecast_horizon']
-        input_lags = model_conf['nbeats_params']['input_lags']
-        residual_datasets = preprocessing.create_direct_forecast_datasets(residuals_train, input_lags, horizon)
-
-        for h in range(1, horizon + 1):
-            X_res, y_res = residual_datasets[h]
-            model_path = os.path.join(models_path, f"{execution_name}_h{h}.keras")
-            deep_learning_model.train_and_save_keras_model(
-                X_res, y_res, model_path, model_conf['nbeats_params'], 
-                model_builder=deep_learning_model.build_nbeats_model, output_shape=1
-            )
-
-    elif model_type == 'Hybrid_MIMO':
-        dependency_name = model_conf.get('depends_on')
-        arima_model_path = os.path.join(models_path, f"{dataset_conf['name']}_{dependency_name}.joblib")
-        if not os.path.exists(arima_model_path): raise FileNotFoundError(f"Modelo ARIMA dependente não encontrado.")
-        
-        arima_instance = joblib.load(arima_model_path)
-        residuals_train = train_series - pd.Series(arima_instance.predict_in_sample(), index=train_series.index)
-
-        horizon = dataset_conf['forecast_horizon']
-        input_lags = model_conf['nbeats_params']['input_lags']
-        
-        X_res, y_res = preprocessing.create_mimo_forecast_dataset(residuals_train, input_lags, horizon)
-
-        model_path = os.path.join(models_path, f"{execution_name}.keras")
-        deep_learning_model.train_and_save_keras_model(
-            X_res, y_res, model_path, model_conf['nbeats_params'],
-            model_builder=deep_learning_model.build_nbeats_mimo_model, output_shape=horizon
-        )
     else:
         print(f"AVISO: Tipo de modelo '{model_type}' não possui lógica de treino definida.")
