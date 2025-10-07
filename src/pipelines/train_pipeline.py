@@ -91,8 +91,13 @@ def run(main_config: dict, model_conf: dict, dataset_conf: dict,
                 output_shape=1)
 
     elif model_type in [
-            'iTransformer', 'NHiTS', 'Hybrid_MIMO_NHITS',
-            'Hybrid_Direct_NHITS', 'Hybrid_MIMO_NBEATS_NF',
+            'iTransformer',
+            'NHiTS',
+            'NBEATS_MIMO',
+            'NBEATS_Direct',  # <-- ADICIONADOS AQUI
+            'Hybrid_MIMO_NHITS',
+            'Hybrid_Direct_NHITS',
+            'Hybrid_MIMO_NBEATS_NF',
             'Hybrid_Direct_NBEATS_NF'
     ]:
         print(

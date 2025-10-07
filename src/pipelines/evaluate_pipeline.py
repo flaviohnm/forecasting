@@ -108,6 +108,25 @@ def run(main_config: dict, model_conf: dict, dataset_conf: dict,
             final_forecast = pd.Series(predictions, index=test_series.index)
             forecasts_df['previsao'] = final_forecast
 
+        # --- BLOCOS DE AVALIAÇÃO PARA N-BEATS STANDALONE ADICIONADOS ---
+        elif model_type == 'NBEATS_MIMO':
+            print(f"Avaliando modelo {model_type} puro...")
+            model_params = model_conf['nbeats_params']
+            predictions = deep_learning_model.train_and_predict_neuralforecast(
+                train_series, len(test_series), NBEATS, model_params)
+            final_forecast = pd.Series(predictions, index=test_series.index)
+            forecasts_df['previsao'] = final_forecast
+
+        elif model_type == 'NBEATS_Direct':
+            print(f"Avaliando modelo {model_type} puro...")
+            model_params = model_conf['nbeats_params']
+            input_lags = model_params['model_kwargs']['input_size']
+            predictions = deep_learning_model.predict_residuals_direct_nf(
+                train_series, len(test_series), input_lags, NBEATS,
+                model_params)
+            final_forecast = pd.Series(predictions, index=test_series.index)
+            forecasts_df['previsao'] = final_forecast
+
         elif model_type.startswith('Hybrid_'):
             print(f"Avaliando modelo Híbrido: {model_type}...")
             dependency_name = model_conf.get('depends_on')
