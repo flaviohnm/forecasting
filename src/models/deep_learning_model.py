@@ -1,23 +1,17 @@
-# File: src/models/deep_learning_model.py
-
-import tensorflow as tf
 from tensorflow.keras.models import Sequential, load_model
 from tensorflow.keras.layers import Dense, LSTM, Input
 from tensorflow.keras.optimizers import Adam
 import os
 import pandas as pd
 import numpy as np
-import pytorch_lightning as pl
 import time
 
 from neuralforecast import NeuralForecast
-from neuralforecast.models import iTransformer, NHITS, NBEATS
 
 
 def build_mlp_model(input_shape: tuple, output_shape: int, n_neurons: list, learning_rate: float):
     """Constrói um modelo MLP simples com Keras."""
     model = Sequential()
-    # --- CORREÇÃO APLICADA ---
     # Adicionamos uma camada de Input explícita
     model.add(Input(shape=input_shape))
     # A primeira camada Dense não precisa mais do 'input_shape'
@@ -33,7 +27,6 @@ def build_mlp_model(input_shape: tuple, output_shape: int, n_neurons: list, lear
 def build_lstm_model(input_shape: tuple, output_shape: int, n_neurons: list, learning_rate: float):
     """Constrói um modelo LSTM simples com Keras."""
     model = Sequential()
-    # --- CORREÇÃO APLICADA ---
     # Adicionamos uma camada de Input explícita
     model.add(Input(shape=(input_shape[0], 1)))
     # A camada LSTM não precisa mais do 'input_shape'
@@ -121,8 +114,6 @@ def train_and_predict_neuralforecast(train_series: pd.Series, horizon: int,
     forecast_df = nf.predict()
 
     print("Previsão com NeuralForecast concluída.")
-
-    # --- LÓGICA DE RETORNO CORRIGIDA E ROBUSTA ---
     # Encontra o nome da coluna da previsão dinamicamente
     cols = forecast_df.columns
     model_col = [c for c in cols if c not in ['unique_id', 'ds']][0]
@@ -169,7 +160,6 @@ def predict_residuals_direct_nf(residuals_train: pd.Series, horizon: int,
 
         forecast = nf.predict()
 
-        # --- LÓGICA DE RETORNO CORRIGIDA E ROBUSTA ---
         # Encontra o nome da coluna da previsão dinamicamente
         cols = forecast.columns
         model_col = [c for c in cols if c not in ['unique_id', 'ds']][0]

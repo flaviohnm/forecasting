@@ -1,11 +1,8 @@
-# File: src/pipelines/evaluate_pipeline.py
-
 import os
 import pandas as pd
 import numpy as np
 import joblib
 from sklearn.metrics import mean_absolute_percentage_error
-from sklearn.preprocessing import StandardScaler, MinMaxScaler
 from tensorflow.keras.models import load_model
 
 from src.data_management import preprocessing

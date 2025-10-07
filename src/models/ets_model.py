@@ -1,5 +1,3 @@
-# File: src/models/ets_model.py
-
 import os
 import pandas as pd
 from statsmodels.tsa.api import ETSModel

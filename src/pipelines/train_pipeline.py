@@ -1,12 +1,9 @@
-# File: src/pipelines/train_pipeline.py
-
 import os
 import pandas as pd
 import joblib
-import numpy as np
 from sklearn.preprocessing import StandardScaler, MinMaxScaler
 
-from src.data_management import downloader, preprocessing
+from src.data_management import preprocessing
 from src.models import arima_model, deep_learning_model, ets_model
 
 
@@ -44,7 +41,6 @@ def run(main_config: dict, model_conf: dict, dataset_conf: dict,
         params_key = 'mlp_params' if model_type == 'MLP' else 'lstm_params'
         model_builder = deep_learning_model.build_mlp_model if model_type == 'MLP' else deep_learning_model.build_lstm_model
 
-        # --- LÓGICA DE ESCALONAMENTO ADICIONADA ---
         scaler_type = dataset_conf.get('preprocessing', {}).get('scaler')
         scaled_train_series = train_series.copy()
 
@@ -94,19 +90,19 @@ def run(main_config: dict, model_conf: dict, dataset_conf: dict,
             'iTransformer',
             'NHiTS',
             'NBEATS_MIMO',
-            'NBEATS_Direct',  # <-- ADICIONADOS AQUI
+            'NBEATS_Direct',
             'Hybrid_MIMO_NHITS',
             'Hybrid_Direct_NHITS',
             'Hybrid_MIMO_NBEATS_NF',
             'Hybrid_Direct_NBEATS_NF'
     ]:
         print(
-            f"INFO: Modelo {model_type} (baseado em NeuralForecast) não requer um passo de treino separado. O treino ocorrerá durante a avaliação."
+            f"INFO: O treino do modelo {model_type} ocorrerá durante a avaliação."
         )
         pass
 
     elif model_type in [
-            'Hybrid_MLP_Recursive', 'Hybrid_LSTM_Recursive', 'Hybrid_MLP_MIMO'
+            'Hybrid_MLP_Recursive', 'Hybrid_MLP_MIMO', 'Hybrid_LSTM_Recursive',
     ]:
         dependency_name = model_conf.get('depends_on')
         arima_model_path = os.path.join(

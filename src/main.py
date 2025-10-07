@@ -1,8 +1,6 @@
-# File: src/main.py
-
 import os
 import logging
-# Esconde as mensagens do TensorFlow
+
 os.environ['TF_ENABLE_ONEDNN_OPTS'] = '0'
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
 os.environ['NIXTLA_ID_AS_COL'] = '1'
@@ -138,7 +136,7 @@ def main():
 
         # Etapa 1: Download
         print("\n" + "=" * 50 + "\n[ETAPA DE DOWNLOAD]\n" + "=" * 50)
-        # --- CORREÇÃO APLICADA ---
+
         downloader.prepare_raw_data(main_config)
 
         # Etapa de Testes Estatísticos
@@ -168,7 +166,6 @@ def main():
         print("\n--- EXECUÇÃO COMPLETA CONCLUÍDA ---")
 
     elif args.step == 'download':
-        # --- CORREÇÃO APLICADA ---
         downloader.prepare_raw_data(main_config)
 
     elif args.step in ['train', 'evaluate']:
