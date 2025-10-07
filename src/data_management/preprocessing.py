@@ -61,3 +61,16 @@ def create_mimo_forecast_dataset(series: pd.Series, input_lags: int, forecast_ho
         y.append(series.iloc[i + input_lags : i + input_lags + forecast_horizon].values)
     
     return np.array(X), np.array(y)
+
+def create_recursive_forecast_dataset(series: pd.Series, input_lags: int):
+    """
+    Cria um único dataset para a abordagem Recursiva (prevê apenas 1 passo à frente).
+    """
+    X, y = [], []
+    # O horizonte é sempre 1 para o alvo na estratégia recursiva
+    forecast_horizon = 1
+    for i in range(len(series) - input_lags - forecast_horizon + 1):
+        X.append(series.iloc[i : i + input_lags].values)
+        y.append(series.iloc[i + input_lags])
+    
+    return np.array(X), np.array(y)

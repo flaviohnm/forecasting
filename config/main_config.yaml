@@ -1,34 +1,102 @@
-# Salve este conteúdo no arquivo: configs/main_config.yaml
+# File: configs/main_config.yaml
 
 # Caminhos principais do projeto
 data_paths:
-  raw: "data/raw/"
-  processed: "data/processed/"
+  raw: "./data/raw/"
+  processed: "./data/processed/"
 
 results_paths:
-  metrics: "results/metrics/"
-  plots: "results/plots/"
+  metrics: "./results/metrics/"
+  plots: "./results/plots/"
 
 models_path: "saved_models/"
 
 # Lista de datasets disponíveis
 datasets:
   - name: "airline"
+    source: "url"
     filename: "airline_passengers.csv"
     url: "https://raw.githubusercontent.com/jbrownlee/Datasets/refs/heads/master/airline-passengers.csv"
     target_column: "Passengers"
     date_column: "Month"
     split_date: "1958-01-01"
     log_transform: True
-    forecast_horizon: 10 # Horizonte específico do dataset
-    seasonal_period: 12  # Período sazonal (m)
+    forecast_horizon: 10
+    seasonal_period: 12
+    preprocessing:
+      scaler: "standard"
 
-  - name: "sunspot"
-    filename: "sunspots.csv"
-    url: "https://raw.githubusercontent.com/jbrownlee/Datasets/master/monthly-sunspots.csv"
-    target_column: "Sunspots"
-    date_column: "Month"
-    split_date: "1950-01-01"
+  # - name: "sunspot"
+  #   source: "url"
+  #   filename: "sunspots.csv"
+  #   url: "https://raw.githubusercontent.com/jbrownlee/Datasets/master/monthly-sunspots.csv"
+  #   target_column: "Sunspots"
+  #   date_column: "Month"
+  #   split_date: "1950-01-01"
+  #   log_transform: False
+  #   forecast_horizon: 10
+  #   seasonal_period: 12
+  #   preprocessing:
+  #     scaler: "minmax"
+
+
+  # --- NOVOS DATASETS DE STATSMODELS HABILITADOS ---
+  # - name: "nottem"
+  #   source: "statsmodels"
+  #   filename: "nottem.csv"
+  #   target_column: "NottinghamTemp"
+  #   date_column: "date"
+  #   split_date: "1935-01-01"
+  #   log_transform: False
+  #   forecast_horizon: 10
+  #   seasonal_period: 12
+  #   preprocessing:
+  #     scaler: "standard"
+
+  # - name: "JohnsonJohnson"
+  #   source: "statsmodels"
+  #   filename: "jj_earnings.csv"
+  #   target_column: "JohnsonJohnson"
+  #   date_column: "date"
+  #   split_date: "1978-01-01"
+  #   log_transform: True
+  #   forecast_horizon: 4
+  #   seasonal_period: 4 # Trimestral
+  #   preprocessing:
+  #     scaler: "standard"
+
+  # - name: "UKgas"
+  #   source: "statsmodels"
+  #   filename: "uk_gas.csv"
+  #   target_column: "UKGas"
+  #   date_column: "date"
+  #   split_date: "1982-01-01"
+  #   log_transform: True
+  #   forecast_horizon: 4
+  #   seasonal_period: 4 # Trimestral
+  #   preprocessing:
+  #     scaler: "standard"
+
+  # - name: "Nile"
+  #   source: "statsmodels"
+  #   filename: "nile_volume.csv"
+  #   target_column: "Nile"
+  #   date_column: "date"
+  #   split_date: "1950-01-01"
+  #   log_transform: False
+  #   forecast_horizon: 10
+  #   seasonal_period: 1 # Anual, sem sazonalidade
+  #   preprocessing:
+      scaler: "standard"
+
+  - name: "ukdriverdeaths"
+    source: "statsmodels"
+    filename: "uk_driver_deaths.csv"
+    target_column: "UKDriverDeaths"
+    date_column: "date"
+    split_date: "1980-01-01"
     log_transform: False
     forecast_horizon: 10
-    seasonal_period: 12 # Sem sazonalidade clara
+    seasonal_period: 12 # Mensal
+    preprocessing:
+      scaler: "standard"

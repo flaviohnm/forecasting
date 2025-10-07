@@ -5,6 +5,8 @@ import pandas as pd
 import numpy as np
 import joblib
 from sklearn.metrics import mean_absolute_percentage_error
+from sklearn.preprocessing import StandardScaler, MinMaxScaler
+from tensorflow.keras.models import load_model
 
 from src.data_management import preprocessing
 from src.models import deep_learning_model, ets_model
@@ -13,7 +15,6 @@ from neuralforecast.models import iTransformer, NHITS, NBEATS
 
 def mean_absolute_scaled_error(y_true, y_pred, y_train):
     n = len(y_train)
-    # Garante que y_train seja um array numpy para operações de slicing e subtração
     y_train = np.asarray(y_train)
     d = np.sum(np.abs(y_train[1:] - y_train[:-1])) / (n - 1)
     if d == 0: return np.mean(np.abs(y_true - y_pred))
@@ -22,8 +23,7 @@ def mean_absolute_scaled_error(y_true, y_pred, y_train):
 
 def run(main_config: dict, model_conf: dict, dataset_conf: dict,
         execution_name: str):
-    
-    # --- NOVO BLOCO TRY...EXCEPT PARA ROBUSTEZ ---
+
     try:
         model_type = model_conf['model_type']
         models_path = main_config['models_path']
@@ -33,13 +33,15 @@ def run(main_config: dict, model_conf: dict, dataset_conf: dict,
             main_config, dataset_conf)
         if len(test_series) > horizon: test_series = test_series.iloc[:horizon]
 
-        final_forecast, forecasts_df = None, pd.DataFrame({'real': test_series})
+        final_forecast, forecasts_df = None, pd.DataFrame(
+            {'real': test_series})
 
         if model_type == 'ARIMA':
             print("Avaliando modelo ARIMA puro...")
             model_path = os.path.join(models_path, f"{execution_name}.joblib")
             if not os.path.exists(model_path):
-                raise FileNotFoundError(f"Modelo não encontrado: '{model_path}'.")
+                raise FileNotFoundError(
+                    f"Modelo não encontrado: '{model_path}'.")
             arima_instance = joblib.load(model_path)
             predictions = arima_instance.predict(n_periods=len(test_series))
             final_forecast = pd.Series(predictions, index=test_series.index)
@@ -48,30 +50,58 @@ def run(main_config: dict, model_conf: dict, dataset_conf: dict,
         elif model_type == 'ETS':
             print("Avaliando modelo ETS puro...")
             model_path = os.path.join(models_path, f"{execution_name}.pkl")
-            predictions = ets_model.load_and_forecast_ets(model_path,
-                                                          len(test_series))
+            predictions = ets_model.load_and_forecast_ets(
+                model_path, len(test_series))
             final_forecast = pd.Series(predictions, index=test_series.index)
             forecasts_df['previsao'] = final_forecast
 
-        elif model_type == 'LSTM':
-            print("Avaliando modelo LSTM puro...")
-            input_lags = model_conf['lstm_params']['input_lags']
-            last_data_points = train_series.values[-input_lags:]
-            predictions = [
-                deep_learning_model.load_and_predict_keras_direct(os.path.join(
-                    models_path, f"{execution_name}_h{h}.keras"),
-                                                                  last_data_points,
-                                                                  is_lstm=True)
-                for h in range(1,
-                               len(test_series) + 1)
-            ]
+        elif model_type == 'NAIVE':
+            print("Avaliando modelo NAIVE...")
+            last_value = train_series.iloc[-1]
+            predictions = np.full(shape=len(test_series),
+                                  fill_value=last_value)
+            final_forecast = pd.Series(predictions, index=test_series.index)
+            forecasts_df['previsao'] = final_forecast
+
+        elif model_type == 'MLP' or model_type == 'LSTM':
+            print(f"Avaliando modelo {model_type} puro...")
+            params_key = 'mlp_params' if model_type == 'MLP' else 'lstm_params'
+            is_lstm = model_type == 'LSTM'
+            input_lags = model_conf[params_key]['input_lags']
+
+            scaler_path = os.path.join(models_path,
+                                       f"{execution_name}_scaler.joblib")
+            scaler = joblib.load(scaler_path) if os.path.exists(
+                scaler_path) else None
+
+            last_data_points = train_series.values[-input_lags:].reshape(-1, 1)
+            last_data_points_scaled = scaler.transform(
+                last_data_points).flatten(
+                ) if scaler else last_data_points.flatten()
+
+            predictions_scaled = []
+            for h in range(1, len(test_series) + 1):
+                model_path = os.path.join(models_path,
+                                          f"{execution_name}_h{h}.keras")
+                pred_scaled = deep_learning_model.load_and_predict_keras_direct(
+                    model_path, last_data_points_scaled, is_lstm=is_lstm)
+                predictions_scaled.append(pred_scaled)
+
+            if scaler:
+                predictions = scaler.inverse_transform(
+                    np.array(predictions_scaled).reshape(-1, 1)).flatten()
+            else:
+                predictions = np.array(predictions_scaled)
+
             final_forecast = pd.Series(predictions, index=test_series.index)
             forecasts_df['previsao'] = final_forecast
 
         elif model_type in ['iTransformer', 'NHiTS']:
             print(f"Avaliando modelo {model_type} puro...")
             model_class = iTransformer if model_type == 'iTransformer' else NHITS
-            model_params = model_conf['itransformer_params'] if model_type == 'iTransformer' else model_conf['nhits_params']
+            model_params = model_conf[
+                'itransformer_params'] if model_type == 'iTransformer' else model_conf[
+                    'nhits_params']
 
             predictions = deep_learning_model.train_and_predict_neuralforecast(
                 train_series, len(test_series), model_class, model_params)
@@ -82,57 +112,131 @@ def run(main_config: dict, model_conf: dict, dataset_conf: dict,
             print(f"Avaliando modelo Híbrido: {model_type}...")
             dependency_name = model_conf.get('depends_on')
             arima_model_path = os.path.join(
-                models_path, f"{dataset_conf['name']}_{dependency_name}.joblib")
+                models_path,
+                f"{dataset_conf['name']}_{dependency_name}.joblib")
             if not os.path.exists(arima_model_path):
-                raise FileNotFoundError(f"Modelo ARIMA dependente não encontrado: '{arima_model_path}'.")
+                raise FileNotFoundError(
+                    f"Modelo ARIMA dependente não encontrado: '{arima_model_path}'."
+                )
 
             arima_instance = joblib.load(arima_model_path)
-            linear_forecasts = arima_instance.predict(n_periods=len(test_series))
+            linear_forecasts = arima_instance.predict(
+                n_periods=len(test_series))
             residuals_train = train_series - pd.Series(
                 arima_instance.predict_in_sample(), index=train_series.index)
-            
+
             nonlinear_forecasts = None
 
-            if model_type == 'Hybrid_MIMO_NHITS':
-                nonlinear_forecasts = deep_learning_model.train_and_predict_neuralforecast(
-                    residuals_train, len(test_series), NHITS, model_conf['nhits_params']
-                )
-            elif model_type == 'Hybrid_MIMO_NBEATS_NF':
-                nonlinear_forecasts = deep_learning_model.train_and_predict_neuralforecast(
-                    residuals_train, len(test_series), NBEATS, model_conf['nbeats_params']
-                )
-            elif model_type == 'Hybrid_Direct_NHITS':
-                input_lags = model_conf['nhits_params']['model_kwargs']['input_size']
-                nonlinear_forecasts = deep_learning_model.predict_residuals_direct_nf(
-                    residuals_train, len(test_series), input_lags, NHITS, model_conf['nhits_params']
-                )
-            elif model_type == 'Hybrid_Direct_NBEATS_NF':
-                input_lags = model_conf['nbeats_params']['model_kwargs']['input_size']
-                nonlinear_forecasts = deep_learning_model.predict_residuals_direct_nf(
-                    residuals_train, len(test_series), input_lags, NBEATS, model_conf['nbeats_params']
-                )
-            
+            if model_type in ['Hybrid_MLP_Recursive', 'Hybrid_LSTM_Recursive']:
+                params_key = 'mlp_params' if 'MLP' in model_type else 'lstm_params'
+                is_lstm = 'LSTM' in model_type
+                input_lags = model_conf[params_key]['input_lags']
+                model_path = os.path.join(models_path,
+                                          f"{execution_name}.keras")
+
+                scaler_path = os.path.join(models_path,
+                                           f"{execution_name}_scaler.joblib")
+                scaler = joblib.load(scaler_path) if os.path.exists(
+                    scaler_path) else None
+
+                last_residuals = residuals_train.values[-input_lags:].reshape(
+                    -1, 1)
+                last_residuals_scaled = scaler.transform(
+                    last_residuals).flatten().tolist(
+                    ) if scaler else last_residuals.flatten().tolist()
+
+                nonlinear_forecasts_scaled = []
+                for _ in range(len(test_series)):
+                    input_window = np.array(last_residuals_scaled)
+                    pred_scaled = deep_learning_model.load_and_predict_keras_direct(
+                        model_path, input_window, is_lstm=is_lstm)
+                    nonlinear_forecasts_scaled.append(pred_scaled)
+                    last_residuals_scaled.pop(0)
+                    last_residuals_scaled.append(pred_scaled)
+
+                if scaler:
+                    nonlinear_forecasts = scaler.inverse_transform(
+                        np.array(nonlinear_forecasts_scaled).reshape(
+                            -1, 1)).flatten()
+                else:
+                    nonlinear_forecasts = np.array(nonlinear_forecasts_scaled)
+
+            elif model_type == 'Hybrid_MLP_MIMO':
+                input_lags = model_conf['mlp_params']['input_lags']
+                model_path = os.path.join(models_path,
+                                          f"{execution_name}.keras")
+
+                scaler_path = os.path.join(models_path,
+                                           f"{execution_name}_scaler.joblib")
+                scaler = joblib.load(scaler_path) if os.path.exists(
+                    scaler_path) else None
+
+                last_residuals = residuals_train.values[-input_lags:].reshape(
+                    -1, 1)
+                last_residuals_scaled = scaler.transform(
+                    last_residuals).flatten(
+                    ) if scaler else last_residuals.flatten()
+
+                model = load_model(model_path)
+                prediction_scaled = model.predict(
+                    last_residuals_scaled.reshape(1, -1), verbose=0)
+
+                if scaler:
+                    nonlinear_forecasts = scaler.inverse_transform(
+                        prediction_scaled.reshape(-1, 1)).flatten()
+                else:
+                    nonlinear_forecasts = prediction_scaled.flatten()
+
+            elif model_type in [
+                    'Hybrid_MIMO_NHITS', 'Hybrid_MIMO_NBEATS_NF',
+                    'Hybrid_Direct_NHITS', 'Hybrid_Direct_NBEATS_NF'
+            ]:
+                if model_type == 'Hybrid_MIMO_NHITS':
+                    nonlinear_forecasts = deep_learning_model.train_and_predict_neuralforecast(
+                        residuals_train, len(test_series), NHITS,
+                        model_conf['nhits_params'])
+                elif model_type == 'Hybrid_MIMO_NBEATS_NF':
+                    nonlinear_forecasts = deep_learning_model.train_and_predict_neuralforecast(
+                        residuals_train, len(test_series), NBEATS,
+                        model_conf['nbeats_params'])
+                elif model_type == 'Hybrid_Direct_NHITS':
+                    input_lags = model_conf['nhits_params']['model_kwargs'][
+                        'input_size']
+                    nonlinear_forecasts = deep_learning_model.predict_residuals_direct_nf(
+                        residuals_train, len(test_series), input_lags, NHITS,
+                        model_conf['nhits_params'])
+                elif model_type == 'Hybrid_Direct_NBEATS_NF':
+                    input_lags = model_conf['nbeats_params']['model_kwargs'][
+                        'input_size']
+                    nonlinear_forecasts = deep_learning_model.predict_residuals_direct_nf(
+                        residuals_train, len(test_series), input_lags, NBEATS,
+                        model_conf['nbeats_params'])
+
             if nonlinear_forecasts is not None:
-                final_forecast = pd.Series(linear_forecasts + nonlinear_forecasts, index=test_series.index)
+                final_forecast = pd.Series(linear_forecasts +
+                                           nonlinear_forecasts,
+                                           index=test_series.index)
                 forecasts_df['previsao'] = final_forecast
                 forecasts_df['previsao_arima'] = linear_forecasts
                 forecasts_df['previsao_residuos'] = nonlinear_forecasts
             else:
-                raise ValueError(f"Lógica de previsão não implementada para o modelo_type Híbrido: {model_type}")
+                raise ValueError(
+                    f"Lógica de previsão não implementada para o modelo_type Híbrido: {model_type}"
+                )
 
         else:
-            print(f"AVISO: Tipo de modelo '{model_type}' não possui lógica de avaliação definida.")
+            print(
+                f"AVISO: Tipo de modelo '{model_type}' não possui lógica de avaliação definida."
+            )
             return
 
-        # --- Verificação de Previsão Válida ---
-        # Se final_forecast não foi gerada ou contém valores inválidos, não prossiga.
-        if final_forecast is None or final_forecast.isnull().any() or np.isinf(final_forecast).any():
-             raise ValueError("A previsão gerou valores inválidos (NaN ou Inf).")
+        if final_forecast is None or final_forecast.isnull().any() or np.isinf(
+                final_forecast).any():
+            raise ValueError(
+                "A previsão gerou valores inválidos (NaN ou Inf).")
 
-
-        # --- Cálculo de Métricas e Salvamento ---
         y_true, y_pred, y_train = test_series.values, final_forecast.values, train_series.values
-        
+
         if dataset_conf.get('log_transform', False):
             y_true_orig = np.exp(y_true)
             y_pred_orig = np.exp(y_pred)
@@ -142,18 +246,25 @@ def run(main_config: dict, model_conf: dict, dataset_conf: dict,
         mape = mean_absolute_percentage_error(y_true_orig, y_pred_orig)
         mase = mean_absolute_scaled_error(y_true, y_pred, y_train)
 
-        print(f"Resultados para '{execution_name}':\n  - MAPE: {mape:.4f}\n  - MASE: {mase:.4f}")
+        print(
+            f"Resultados para '{execution_name}':\n  - MAPE: {mape:.4f}\n  - MASE: {mase:.4f}"
+        )
 
         metrics_df = pd.DataFrame({
-            'execution_name': [execution_name], 'model_type': [model_type],
-            'dataset': [dataset_conf['name']], 'MAPE': [mape], 'MASE': [mase]
+            'execution_name': [execution_name],
+            'model_type': [model_type],
+            'dataset': [dataset_conf['name']],
+            'MAPE': [mape],
+            'MASE': [mase]
         })
         metrics_df.to_csv(os.path.join(main_config['results_paths']['metrics'],
-                                       f"metrics_{execution_name}.csv"), index=False)
+                                       f"metrics_{execution_name}.csv"),
+                          index=False)
         forecasts_df.to_csv(
             os.path.join(main_config['results_paths']['plots'],
                          f"forecasts_{execution_name}.csv"))
-    
+
     except Exception as e:
+        import traceback
         print(f"\n!!!!!! AVALIAÇÃO FALHOU para '{execution_name}' !!!!!!!")
-        print(f"Causa: {e}\n")
+        print(f"Causa: {e}\n{traceback.format_exc()}\n")

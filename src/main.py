@@ -1,3 +1,5 @@
+# File: src/main.py
+
 import os
 import logging
 # Esconde as mensagens do TensorFlow
@@ -80,8 +82,12 @@ def run_pipeline_step(step_name, main_config, executions_to_run):
             pipeline_func(main_config, model_conf, dataset_conf,
                           execution_name)
         except Exception as e:
-            print(f"ERRO na execução '{execution_name}': {e}")
-            break
+            import traceback
+            print(
+                f"ERRO na execução '{execution_name}': {e}\n{traceback.format_exc()}"
+            )
+            # Em vez de 'break', podemos usar 'continue' para não parar todo o pipeline
+            continue
 
 
 def main():
@@ -112,7 +118,7 @@ def main():
 
     args = parser.parse_args()
 
-    # Carrega as configurações (mantendo seus caminhos customizados)
+    # Carrega as configurações
     with open('./config/main_config.yaml', 'r') as f:
         main_config = yaml.safe_load(f)
     with open('./config/model_params.yaml', 'r') as f:
@@ -132,14 +138,14 @@ def main():
 
         # Etapa 1: Download
         print("\n" + "=" * 50 + "\n[ETAPA DE DOWNLOAD]\n" + "=" * 50)
-        downloader.download_all_datasets(main_config)
+        # --- CORREÇÃO APLICADA ---
+        downloader.prepare_raw_data(main_config)
 
-        # MUDANÇA: Etapa de Testes Estatísticos adicionada ao full_run
+        # Etapa de Testes Estatísticos
         print("\n" + "=" * 50 + "\n[ETAPA DE ANÁLISE ESTATÍSTICA]\n" +
               "=" * 50)
         available_datasets = {ds['name']: ds for ds in main_config['datasets']}
-        datasets_to_run_tests = list(
-            available_datasets.values())  # Roda para todos os datasets
+        datasets_to_run_tests = list(available_datasets.values())
         statistical_tests.run_tests(main_config, datasets_to_run_tests)
 
         # Etapas seguintes...
@@ -152,15 +158,18 @@ def main():
         run_pipeline_step('evaluate', main_config, executions)
 
         print("\n" + "=" * 50 + "\n[ETAPA DE VISUALIZAÇÃO]\n" + "=" * 50)
+        # A lógica de plotagem provavelmente precisa da lista de execuções
         plotter.generate_plots(main_config, executions)
 
         print("\n" + "=" * 50 + "\n[ETAPA DE RELATÓRIO]\n" + "=" * 50)
-        reporter.generate_report(main_config, model_params, args)
+        reporter.generate_report(main_config,
+                                 executions)  # Passando executions
 
         print("\n--- EXECUÇÃO COMPLETA CONCLUÍDA ---")
 
     elif args.step == 'download':
-        downloader.download_all_datasets(main_config)
+        # --- CORREÇÃO APLICADA ---
+        downloader.prepare_raw_data(main_config)
 
     elif args.step in ['train', 'evaluate']:
         executions = get_executions_to_run(main_config, model_params, args)
@@ -173,11 +182,12 @@ def main():
 
     elif args.step == 'report':
         print("--- EXECUTANDO APENAS A ETAPA DE RELATÓRIO ---")
-        reporter.generate_report(main_config, model_params, args)
+        # O relatório também precisa saber quais execuções considerar
+        executions = get_executions_to_run(main_config, model_params, args)
+        reporter.generate_report(main_config, executions)
 
     elif args.step == 'testes':
         print("--- EXECUTANDO APENAS A ETAPA DE ANÁLISE ESTATÍSTICA ---")
-
         available_datasets = {ds['name']: ds for ds in main_config['datasets']}
         datasets_to_run = []
         if 'all' in args.dataset:
