@@ -1,5 +1,3 @@
-# File: src/reporting/reporter.py
-
 import os
 import pandas as pd
 from datetime import datetime
@@ -31,7 +29,6 @@ def generate_report(main_config: dict, executions: list):
     # 2. Consolida e formata o DataFrame de resumo
     summary_df = pd.concat(all_metrics, ignore_index=True)
     
-    # --- CORREÇÃO APLICADA AQUI ---
     # Ordena primeiro por 'dataset' e depois por 'MAPE'
     summary_df = summary_df.sort_values(by=['dataset', 'MAPE'], ascending=True)
     
