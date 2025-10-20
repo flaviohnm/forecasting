@@ -1,6 +1,9 @@
+# File: src/pipelines/train_pipeline.py
+
 import os
 import pandas as pd
 import joblib
+import numpy as np
 from sklearn.preprocessing import StandardScaler, MinMaxScaler
 
 from src.data_management import preprocessing
@@ -21,8 +24,8 @@ def run(main_config: dict, model_conf: dict, dataset_conf: dict,
     if model_type == 'ARIMA':
         model_path = os.path.join(models_path, f"{execution_name}.joblib")
         arima_params = model_conf['arima_params'].copy()
-        arima_params['seasonal'] = dataset_conf['seasonal_period'] > 1
-        arima_params['m'] = dataset_conf['seasonal_period']
+        arima_params['seasonal'] = dataset_conf.get('seasonal_period', 1) > 1
+        arima_params['m'] = dataset_conf.get('seasonal_period', 1)
         arima_model.train_and_save_arima(train_series, model_path,
                                          arima_params)
 
@@ -30,19 +33,20 @@ def run(main_config: dict, model_conf: dict, dataset_conf: dict,
         model_path = os.path.join(models_path, f"{execution_name}.pkl")
         ets_model.train_and_save_ets(train_series, model_path,
                                      model_conf['ets_params'],
-                                     dataset_conf['seasonal_period'])
+                                     dataset_conf.get('seasonal_period', 1))
 
-    elif model_type == 'NAIVE':
-        print("INFO: Modelo NAIVE não requer treinamento.")
+    elif model_type == 'NAIVE' or model_type == 'SEASONAL_NAIVE':
+        print(f"INFO: Modelo {model_type} não requer treinamento.")
         pass
 
-    elif model_type == 'MLP' or model_type == 'LSTM':
-        print(f"[DEBUG] Entrou no bloco de treino {model_type} Standalone.")
-        params_key = 'mlp_params' if model_type == 'MLP' else 'lstm_params'
-        model_builder = deep_learning_model.build_mlp_model if model_type == 'MLP' else deep_learning_model.build_lstm_model
+    elif model_type in ['MLP_Direct', 'LSTM']:
+        print(f"[DEBUG] Entrou no bloco de treino {model_type} Standalone (Direct).")
+        params_key = 'mlp_params' if model_type == 'MLP_Direct' else 'lstm_params'
+        model_builder = deep_learning_model.build_mlp_model if model_type == 'MLP_Direct' else deep_learning_model.build_lstm_model
 
         scaler_type = dataset_conf.get('preprocessing', {}).get('scaler')
         scaled_train_series = train_series.copy()
+        scaler = None # Initialize scaler
 
         if scaler_type:
             if scaler_type == 'standard':
@@ -70,7 +74,6 @@ def run(main_config: dict, model_conf: dict, dataset_conf: dict,
 
         horizon = dataset_conf['forecast_horizon']
         input_lags = model_conf[params_key]['input_lags']
-        # Usa a série escalada para criar os datasets
         datasets = preprocessing.create_direct_forecast_datasets(
             scaled_train_series, input_lags, horizon)
 
@@ -85,6 +88,37 @@ def run(main_config: dict, model_conf: dict, dataset_conf: dict,
                 model_conf[params_key],
                 model_builder=model_builder,
                 output_shape=1)
+
+    elif model_type == 'MLP_MIMO':
+        print(f"[DEBUG] Entrou no bloco de treino {model_type} Standalone (MIMO).")
+        scaler_type = dataset_conf.get('preprocessing', {}).get('scaler')
+        scaled_train_series = train_series.copy()
+        scaler = None # Initialize scaler
+
+        if scaler_type:
+            if scaler_type == 'standard':
+                scaler = StandardScaler()
+            elif scaler_type == 'minmax':
+                scaler = MinMaxScaler()
+            else:
+                raise ValueError(f"Tipo de scaler desconhecido: {scaler_type}")
+            scaled_values = scaler.fit_transform(train_series.values.reshape(-1, 1)).flatten()
+            scaled_train_series = pd.Series(scaled_values, index=train_series.index)
+            scaler_path = os.path.join(models_path, f"{execution_name}_scaler.joblib")
+            joblib.dump(scaler, scaler_path)
+            print(f"[INFO] Scaler '{scaler_type}' da série salvo em: {scaler_path}")
+        else:
+            print("[INFO] Nenhum scaler especificado para modelo Keras MIMO. Treinando com dados originais.")
+
+        horizon = dataset_conf['forecast_horizon']
+        input_lags = model_conf['mlp_params']['input_lags']
+        X_train, y_train = preprocessing.create_mimo_forecast_dataset(
+            scaled_train_series, input_lags, horizon)
+
+        model_path = os.path.join(models_path, f"{execution_name}.keras")
+        deep_learning_model.train_and_save_keras_model(
+            X_train, y_train, model_path, model_conf['mlp_params'],
+            model_builder=deep_learning_model.build_mlp_model, output_shape=horizon)
 
     elif model_type in [
             'iTransformer',
@@ -101,9 +135,7 @@ def run(main_config: dict, model_conf: dict, dataset_conf: dict,
         )
         pass
 
-    elif model_type in [
-            'Hybrid_MLP_Recursive', 'Hybrid_MLP_MIMO', 'Hybrid_LSTM_Recursive',
-    ]:
+    elif model_type.startswith('Hybrid_'):
         dependency_name = model_conf.get('depends_on')
         arima_model_path = os.path.join(
             models_path, f"{dataset_conf['name']}_{dependency_name}.joblib")
@@ -118,6 +150,7 @@ def run(main_config: dict, model_conf: dict, dataset_conf: dict,
 
         scaler_type = dataset_conf.get('preprocessing', {}).get('scaler')
         scaled_residuals_train = residuals_train.copy()
+        scaler = None # Initialize scaler
 
         if scaler_type:
             if scaler_type == 'standard':
@@ -143,7 +176,19 @@ def run(main_config: dict, model_conf: dict, dataset_conf: dict,
                 "[INFO] Nenhum scaler especificado. Treinando com resíduos originais."
             )
 
-        if 'Recursive' in model_type:
+        if model_type == 'Hybrid_MLP_Direct':
+            print("[DEBUG] Entrou no bloco de treino Hybrid_MLP_Direct.")
+            horizon = dataset_conf['forecast_horizon']
+            input_lags = model_conf['mlp_params']['input_lags']
+            datasets = preprocessing.create_direct_forecast_datasets(scaled_residuals_train, input_lags, horizon)
+            for h in range(1, horizon + 1):
+                X_train, y_train = datasets[h]
+                model_path = os.path.join(models_path, f"{execution_name}_h{h}.keras")
+                deep_learning_model.train_and_save_keras_model(
+                    X_train, y_train, model_path, model_conf['mlp_params'],
+                    model_builder=deep_learning_model.build_mlp_model, output_shape=1)
+
+        elif model_type in ['Hybrid_MLP_Recursive', 'Hybrid_LSTM_Recursive']:
             params_key = 'mlp_params' if 'MLP' in model_type else 'lstm_params'
             model_builder = deep_learning_model.build_mlp_model if 'MLP' in model_type else deep_learning_model.build_lstm_model
 

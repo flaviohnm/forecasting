@@ -41,17 +41,17 @@ datasets:
 
 
   # --- NOVOS DATASETS DE STATSMODELS HABILITADOS ---
-  # - name: "nottem"
-  #   source: "statsmodels"
-  #   filename: "nottem.csv"
-  #   target_column: "NottinghamTemp"
-  #   date_column: "date"
-  #   split_date: "1935-01-01"
-  #   log_transform: False
-  #   forecast_horizon: 10
-  #   seasonal_period: 12
-  #   preprocessing:
-  #     scaler: "standard"
+  - name: "nottem"
+    source: "statsmodels"
+    filename: "nottem.csv"
+    target_column: "NottinghamTemp"
+    date_column: "date"
+    split_date: "1935-01-01"
+    log_transform: False
+    forecast_horizon: 10
+    seasonal_period: 12
+    preprocessing:
+      scaler: "standard"
 
   # - name: "JohnsonJohnson"
   #   source: "statsmodels"
@@ -65,29 +65,29 @@ datasets:
   #   preprocessing:
   #     scaler: "standard"
 
-  # - name: "UKgas"
-  #   source: "statsmodels"
-  #   filename: "uk_gas.csv"
-  #   target_column: "UKGas"
-  #   date_column: "date"
-  #   split_date: "1982-01-01"
-  #   log_transform: True
-  #   forecast_horizon: 4
-  #   seasonal_period: 4 # Trimestral
-  #   preprocessing:
-  #     scaler: "standard"
-
-  # - name: "Nile"
-  #   source: "statsmodels"
-  #   filename: "nile_volume.csv"
-  #   target_column: "Nile"
-  #   date_column: "date"
-  #   split_date: "1950-01-01"
-  #   log_transform: False
-  #   forecast_horizon: 10
-  #   seasonal_period: 1 # Anual, sem sazonalidade
-  #   preprocessing:
+  - name: "UKgas"
+    source: "statsmodels"
+    filename: "uk_gas.csv"
+    target_column: "UKGas"
+    date_column: "date"
+    split_date: "1982-01-01"
+    log_transform: True
+    forecast_horizon: 4
+    seasonal_period: 4 # Trimestral
+    preprocessing:
       scaler: "standard"
+
+  # # - name: "Nile"
+  # #   source: "statsmodels"
+  # #   filename: "nile_volume.csv"
+  # #   target_column: "Nile"
+  # #   date_column: "date"
+  # #   split_date: "1950-01-01"
+  # #   log_transform: False
+  # #   forecast_horizon: 10
+  # #   seasonal_period: 1 # Anual, sem sazonalidade
+  # #   preprocessing:
+  #     scaler: "standard"
 
   - name: "ukdriverdeaths"
     source: "statsmodels"
