@@ -1,5 +1,10 @@
 # File: configs/main_config.yaml
 
+# --- NOVA SEÇÃO ---
+hpo_config:
+  n_trials: 3       # Número de tentativas de HPO por modelo. 50-100 é um bom começo.
+  validation_percentage: 0.2 # Usará os últimos 20% dos dados de treino para validação
+
 # Caminhos principais do projeto
 data_paths:
   raw: "./data/raw/"
@@ -11,14 +16,13 @@ results_paths:
 
 models_path: "saved_models/"
 
-# Lista de datasets disponíveis
+# Lista de datasets disponíveis (TODOS via statsmodels)
 datasets:
-  - name: "airline"
-    source: "url"
-    filename: "airline_passengers.csv"
-    url: "https://raw.githubusercontent.com/jbrownlee/Datasets/refs/heads/master/airline-passengers.csv"
-    target_column: "Passengers"
-    date_column: "Month"
+  - name: "AirPassengers"
+    source: "statsmodels"
+    filename: "airpassengers.csv"
+    target_column: "AirPassengers"
+    date_column: "date"
     split_date: "1958-01-01"
     log_transform: True
     forecast_horizon: 10
@@ -26,21 +30,30 @@ datasets:
     preprocessing:
       scaler: "standard"
 
-  # - name: "sunspot"
-  #   source: "url"
-  #   filename: "sunspots.csv"
-  #   url: "https://raw.githubusercontent.com/jbrownlee/Datasets/master/monthly-sunspots.csv"
-  #   target_column: "Sunspots"
-  #   date_column: "Month"
-  #   split_date: "1950-01-01"
-  #   log_transform: False
-  #   forecast_horizon: 10
-  #   seasonal_period: 12
-  #   preprocessing:
-  #     scaler: "minmax"
+  - name: "sunspots"                
+    source: "statsmodels"
+    filename: "sunspots.csv"        
+    target_column: "Sunspots"       
+    date_column: "date"
+    split_date: "1950-01-01"
+    log_transform: False
+    forecast_horizon: 10
+    seasonal_period: 1              
+    preprocessing:
+      scaler: "minmax"
 
+  - name: "co2"                     
+    source: "statsmodels"
+    filename: "co2.csv"             
+    target_column: "CO2"            
+    date_column: "date"
+    split_date: "1995-01-01"
+    log_transform: False
+    forecast_horizon: 10
+    seasonal_period: 12             
+    preprocessing:
+      scaler: "standard"
 
-  # --- NOVOS DATASETS DE STATSMODELS HABILITADOS ---
   - name: "nottem"
     source: "statsmodels"
     filename: "nottem.csv"
@@ -53,17 +66,17 @@ datasets:
     preprocessing:
       scaler: "standard"
 
-  # - name: "JohnsonJohnson"
-  #   source: "statsmodels"
-  #   filename: "jj_earnings.csv"
-  #   target_column: "JohnsonJohnson"
-  #   date_column: "date"
-  #   split_date: "1978-01-01"
-  #   log_transform: True
-  #   forecast_horizon: 4
-  #   seasonal_period: 4 # Trimestral
-  #   preprocessing:
-  #     scaler: "standard"
+  - name: "JohnsonJohnson"
+    source: "statsmodels"
+    filename: "jj_earnings.csv"
+    target_column: "JohnsonJohnson"
+    date_column: "date"
+    split_date: "1978-01-01"
+    log_transform: True
+    forecast_horizon: 10
+    seasonal_period: 4              
+    preprocessing:
+      scaler: "standard"
 
   - name: "UKgas"
     source: "statsmodels"
@@ -72,22 +85,22 @@ datasets:
     date_column: "date"
     split_date: "1982-01-01"
     log_transform: True
-    forecast_horizon: 4
-    seasonal_period: 4 # Trimestral
+    forecast_horizon: 10
+    seasonal_period: 4              
     preprocessing:
       scaler: "standard"
 
-  # # - name: "Nile"
-  # #   source: "statsmodels"
-  # #   filename: "nile_volume.csv"
-  # #   target_column: "Nile"
-  # #   date_column: "date"
-  # #   split_date: "1950-01-01"
-  # #   log_transform: False
-  # #   forecast_horizon: 10
-  # #   seasonal_period: 1 # Anual, sem sazonalidade
-  # #   preprocessing:
-  #     scaler: "standard"
+  - name: "Nile"
+    source: "statsmodels"
+    filename: "nile_volume.csv"
+    target_column: "Nile"
+    date_column: "date"
+    split_date: "1950-01-01"
+    log_transform: False
+    forecast_horizon: 10
+    seasonal_period: 1              
+    preprocessing:
+      scaler: "standard"
 
   - name: "ukdriverdeaths"
     source: "statsmodels"
@@ -97,6 +110,6 @@ datasets:
     split_date: "1980-01-01"
     log_transform: False
     forecast_horizon: 10
-    seasonal_period: 12 # Mensal
+    seasonal_period: 12             
     preprocessing:
       scaler: "standard"

@@ -8,11 +8,12 @@ import scipy.stats as ss # Para Friedman
 import scikit_posthocs as sp # Para Nemenyi post-hoc
 from itertools import combinations
 import logging
+import warnings # Importado para suprimir avisos
 
 # Configura o logger
 logging.basicConfig(level=logging.INFO, format='%(levelname)s: %(message)s')
 logging.getLogger('pingouin').setLevel(logging.ERROR)
-logging.getLogger('numexpr').setLevel(logging.WARNING) # Suprime aviso do numexpr no pandas
+logging.getLogger('numexpr').setLevel(logging.WARNING)
 
 # --- LÓGICA DO DIEBOLD-MARIANO ---
 def run_diebold_mariano_tests(main_config: dict, successful_executions: list, results_path: str):
@@ -32,6 +33,7 @@ def run_diebold_mariano_tests(main_config: dict, successful_executions: list, re
     for dataset_name, executions_list in datasets.items():
         print(f"  Analise DM para Dataset: {dataset_name}")
         metrics, forecast_data, valid_executions = [], {}, []
+        # (O loop para carregar dados permanece o mesmo)
         for ds_conf, md_conf in executions_list:
             execution_name = f"{dataset_name}_{md_conf['model_name']}"
             metric_file = os.path.join(metrics_path, f"metrics_{execution_name}.csv")
@@ -69,16 +71,21 @@ def run_diebold_mariano_tests(main_config: dict, successful_executions: list, re
 
             error_best = np.abs(y_true[:min_len] - y_pred_best[:min_len])
             error_other = np.abs(y_true[:min_len] - y_pred_other[:min_len])
-
-            # Verifica se os erros têm variância (necessário para t-test)
-            if np.var(error_best) < 1e-10 or np.var(error_other) < 1e-10:
-                 logging.warning(f"DM [{dataset_name}]: Erros constantes detectados entre {best_model_exec_name} e {exec_name_other}. Pulando teste.")
-                 continue # Pula este par se os erros forem constantes
+            
+            # --- VERIFICAÇÃO DE VARIÂNCIA ROBUSTA ---
+            # Verifica se a *diferença* dos erros é constante
+            error_diff = error_best - error_other
+            if np.var(error_diff) < 1e-10:
+                 logging.warning(f"DM [{dataset_name}]: Diferença de erro é constante entre {best_model_exec_name} e {exec_name_other} (provavelmente performance idêntica). Pulando teste.")
+                 continue
 
             try:
-                # --- CORREÇÃO APLICADA AQUI ---
-                # Usar pingouin.ttest para comparação pareada direta
-                dm_result = pg.ttest(error_best, error_other, paired=True, alternative='two-sided')
+                # --- SUPRESSÃO DE AVISOS ADICIONADA ---
+                with warnings.catch_warnings():
+                    # Ignora especificamente o RuntimeWarning de divisão por zero do scipy
+                    warnings.filterwarnings('ignore', message='divide by zero encountered', category=RuntimeWarning)
+                    
+                    dm_result = pg.ttest(error_best, error_other, paired=True, alternative='two-sided')
 
                 dm_stat = dm_result['T'].iloc[0]
                 p_value = dm_result['p-val'].iloc[0]
@@ -87,7 +94,8 @@ def run_diebold_mariano_tests(main_config: dict, successful_executions: list, re
                 dm_results_all.append({'dataset': dataset_name, 'modelo_base': best_model_exec_name,
                                        'modelo_comparado': exec_name_other, 'dm_statistic': dm_stat,
                                        'p_value': p_value, 'diferenca_significativa (p<0.05)': significance})
-            except Exception as e: logging.error(f"DM [{dataset_name}]: Falha no teste ttest entre {best_model_exec_name} e {exec_name_other}: {e}")
+            except Exception as e: 
+                logging.error(f"DM [{dataset_name}]: Falha no teste ttest entre {best_model_exec_name} e {exec_name_other}: {e}")
 
     if dm_results_all:
         dm_df = pd.DataFrame(dm_results_all)
@@ -141,8 +149,10 @@ def run_friedman_nemenyi_test(main_config: dict, successful_executions: list, re
     if pivot_df.shape[0] < 2 or pivot_df.shape[1] < 2:
         print("  Número insuficiente de datasets ou modelos completos para o teste de Friedman.")
         print(f"  Shape final: {pivot_df.shape}")
+        print(f"  Datasets completos usados: {pivot_df.index.tolist()}")
+        print(f"  Modelos completos usados: {pivot_df.columns.tolist()}")
         return
-
+        
     print(f"  Datasets completos usados: {pivot_df.index.tolist()}")
     print(f"  Modelos completos usados: {pivot_df.columns.tolist()}")
 
