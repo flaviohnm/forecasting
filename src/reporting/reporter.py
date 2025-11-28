@@ -21,77 +21,78 @@ def calculate_pd(mape_base, mape_comp):
         return np.nan
     return 100 * (mape_comp - mape_base) / mape_base
 
-def generate_rank_boxplot(summary_df, output_dir):
+# --- NOVA FUNÇÃO: PLOT PROPOSTA VS REFERÊNCIA ---
+def generate_proposal_vs_reference_plot(forecasts_df, output_dir, dataset_name):
     """
-    Gera um boxplot mostrando a distribuição dos rankings de cada modelo
-    através de todos os datasets.
+    Gera um gráfico focado comparando apenas a Proposta (MIMO) e a Referência (Direct)
+    contra o Real.
     """
-    if not PLOTTING_ENABLED or summary_df.empty:
+    if not PLOTTING_ENABLED or forecasts_df.empty:
         return None
 
-    # 1. Calcular o Ranking para cada Dataset (Baseado no MAPE)
-    # Menor MAPE = Ranking 1
-    summary_df['rank'] = summary_df.groupby('dataset')['MAPE'].rank(ascending=True, method='min')
-
-    # 2. Preparar dados para o Boxplot
-    # Queremos ordenar os modelos no eixo X pelo ranking mediano (melhores à esquerda)
-    model_stats = summary_df.groupby('model_type')['rank'].median().sort_values()
-    sorted_models = model_stats.index.tolist()
-
-    data_to_plot = []
-    for model in sorted_models:
-        ranks = summary_df[summary_df['model_type'] == model]['rank'].values
-        data_to_plot.append(ranks)
-
-    # 3. Plotar
-    plt.figure(figsize=(14, 8))
+    # Definição dos modelos de interesse
+    PROPOSED_MODEL = "Hybrid_MIMO_NBEATS_NF"
+    REFERENCE_MODEL = "Hybrid_Direct_NBEATS_NF"
     
-    # Cria o boxplot
-    box = plt.boxplot(data_to_plot, patch_artist=True, showfliers=True)
-
-    # Estilização
-    colors = ['lightblue'] * len(data_to_plot)
-    for patch, color in zip(box['boxes'], colors):
-        patch.set_facecolor(color)
-        patch.set_alpha(0.7)
-
-    # Configuração dos Eixos
-    plt.xticks(range(1, len(sorted_models) + 1), sorted_models, rotation=45, ha='right', fontsize=10)
-    plt.ylabel("Posição no Ranking (1 = Melhor)", fontsize=12)
-    plt.xlabel("Modelos", fontsize=12)
-    plt.title("Distribuição dos Rankings de Cada Modelo (Acurácia Global)", fontsize=14, pad=20)
+    # Filtra apenas os dados desses modelos
+    subset_df = forecasts_df[forecasts_df['model_type'].isin([PROPOSED_MODEL, REFERENCE_MODEL])].copy()
     
-    # Adiciona grid vertical para facilitar leitura
-    plt.grid(axis='y', linestyle='--', alpha=0.6)
+    # Se não tivermos dados de nenhum dos dois, não gera o gráfico
+    if subset_df.empty:
+        return None
+        
+    # Ordena por data para garantir linhas contínuas
+    subset_df = subset_df.sort_values('date_index')
     
-    # Inverte o eixo Y? Não, geralmente ranking 1 fica embaixo no eixo Y numérico, 
-    # mas visualmente queremos ver quem está mais perto de 1. O padrão do matplotlib (1 embaixo) funciona bem.
-    # Vamos apenas garantir que os ticks do eixo Y sejam inteiros
-    max_rank = summary_df['rank'].max()
-    plt.yticks(np.arange(1, max_rank + 2, 1))
-    plt.ylim(0.5, max_rank + 0.5)
+    # Pega dados reais de um dos modelos (assumindo consistência no dataset)
+    # Se o modelo proposto não existir, tenta pegar do referência para extrair o real
+    if not subset_df[subset_df['model_type'] == PROPOSED_MODEL].empty:
+        base_model_for_real = PROPOSED_MODEL
+    else:
+        base_model_for_real = REFERENCE_MODEL
+        
+    real_data = subset_df[subset_df['model_type'] == base_model_for_real][['date_index', 'real']].drop_duplicates().set_index('date_index')
+    
+    plt.figure(figsize=(12, 6))
+    
+    # 1. Plota Real
+    plt.plot(real_data.index, real_data['real'], color='black', linestyle='--', linewidth=2, label='Valor Real', alpha=0.6)
+    
+    # 2. Plota Referência (Direct)
+    ref_data = subset_df[subset_df['model_type'] == REFERENCE_MODEL].set_index('date_index')
+    if not ref_data.empty:
+        plt.plot(ref_data.index, ref_data['previsao'], color='#ff7f0e', marker='x', markersize=6, linestyle='-', linewidth=1.5, label=f'Ref: {REFERENCE_MODEL}', alpha=0.9)
 
+    # 3. Plota Proposta (MIMO)
+    prop_data = subset_df[subset_df['model_type'] == PROPOSED_MODEL].set_index('date_index')
+    if not prop_data.empty:
+        plt.plot(prop_data.index, prop_data['previsao'], color='#1f77b4', marker='o', markersize=5, linestyle='-', linewidth=2, label=f'Prop: {PROPOSED_MODEL}', alpha=0.9)
+
+    plt.title(f"Comparativo: Proposta vs Referência - {dataset_name}", fontsize=14, pad=15)
+    plt.xlabel("Data")
+    plt.ylabel("Valor")
+    plt.legend(loc='best', frameon=True)
+    plt.grid(True, linestyle=':', alpha=0.6)
     plt.tight_layout()
-
-    filename = "boxplot_rankings_global.png"
+    
+    filename = f"proposal_vs_ref_{dataset_name}.png"
     filepath = os.path.join(output_dir, filename)
     
     try:
-        plt.savefig(filepath, dpi=150)
+        plt.savefig(filepath, dpi=120)
         plt.close()
-        print(f"  Gráfico de Boxplot salvo: {filename}")
+        print(f"  Gráfico Proposta vs Referência salvo: {filename}")
         return filename
     except Exception as e:
-        logging.error(f"Erro ao salvar boxplot: {e}")
+        logging.error(f"Erro ao salvar gráfico destaque {dataset_name}: {e}")
         plt.close()
         return None
 
 def generate_actual_vs_predicted_plots(forecasts_df, output_dir, dataset_name):
     """
-    Gera um painel de gráficos (subplots) comparando REAL x PREVISTO.
+    Gera um painel de gráficos (subplots) comparando REAL x PREVISTO por grupo.
     """
-    if not PLOTTING_ENABLED or forecasts_df.empty:
-        return None
+    if not PLOTTING_ENABLED or forecasts_df.empty: return None
 
     order_precedence = {
         'benchmark_statistical': 0,
@@ -110,7 +111,7 @@ def generate_actual_vs_predicted_plots(forecasts_df, output_dir, dataset_name):
     fig, axes = plt.subplots(n_groups, 1, figsize=(12, 5 * n_groups), sharex=True)
     if n_groups == 1: axes = [axes]
     
-    fig.suptitle(f"Real vs Previsto por Grupo - {dataset_name}", fontsize=16, y=0.99)
+    fig.suptitle(f"Painel Geral por Grupo - {dataset_name}", fontsize=16, y=0.99)
     
     forecasts_df = forecasts_df.sort_values('date_index')
     first_model = forecasts_df.iloc[0]['model_type']
@@ -120,9 +121,11 @@ def generate_actual_vs_predicted_plots(forecasts_df, output_dir, dataset_name):
     
     for ax, group in zip(axes, sorted_groups):
         group_data = forecasts_df[forecasts_df['comparison_group'] == group]
+        
         ax.plot(real_data.index, real_data['real'], color='black', linestyle='--', linewidth=2, label='REAL', alpha=0.6)
         
         models_in_group = sorted(group_data['model_type'].unique())
+        
         for model in models_in_group:
             model_subset = group_data[group_data['model_type'] == model].set_index('date_index')
             if not model_subset.empty:
@@ -140,7 +143,6 @@ def generate_actual_vs_predicted_plots(forecasts_df, output_dir, dataset_name):
     try:
         plt.savefig(plot_filepath, dpi=100)
         plt.close()
-        print(f"  Gráfico Real vs Previsto salvo: {plot_filename}")
         return plot_filename
     except Exception as e:
         plt.close()
@@ -161,7 +163,6 @@ def generate_report(main_config: dict, successful_executions: list):
     all_metrics = []
     all_forecasts = []
 
-    # 1. Coleta de Dados
     for dataset_conf, model_conf in successful_executions:
         execution_name = f"{dataset_conf['name']}_{model_conf['model_name']}"
         metric_file = os.path.join(metrics_path, f"metrics_{execution_name}.csv")
@@ -175,7 +176,7 @@ def generate_report(main_config: dict, successful_executions: list):
                 if not df.empty:
                     df['comparison_group'] = comparison_group
                     all_metrics.append(df)
-            except Exception: pass
+            except: pass
         
         if os.path.exists(forecast_file):
             try:
@@ -192,7 +193,7 @@ def generate_report(main_config: dict, successful_executions: list):
                     cols_to_keep = ['date_index', 'real', 'previsao', 'model_type', 'dataset', 'comparison_group']
                     cols_exist = [c for c in cols_to_keep if c in df_f.columns]
                     all_forecasts.append(df_f[cols_exist])
-            except Exception: pass
+            except: pass
 
     if not all_metrics:
         print("Nenhuma métrica encontrada. Relatório abortado.")
@@ -214,32 +215,27 @@ def generate_report(main_config: dict, successful_executions: list):
     now = datetime.now().strftime("%Y-%m-%d %H:%M")
     md_content = f"# Relatório de Experimentos de Forecasting\n\nGerado em: {now}\n\n"
     
-    # --- 2. Análise Global (Boxplot) ---
-    md_content += "## Análise Global de Desempenho (Rankings)\n\n"
-    md_content += "O gráfico abaixo mostra a distribuição dos rankings de cada modelo através de todos os datasets testados. "
-    md_content += "Quanto mais baixa a caixa (mais perto de 1), melhor e mais consistente é o modelo.\n\n"
-    
-    boxplot_file = generate_rank_boxplot(summary_df, report_plot_dir)
-    if boxplot_file:
-        md_content += f"![Distribuição de Rankings](plots/{boxplot_file})\n\n"
-        md_content += "---\n\n"
-
-    # --- 3. Resumo dos Campeões ---
+    # --- SEÇÃO 1: VENCEDORES (ORDEM CORRIGIDA: GRUPO | MODELO | DATASET | MÉTRICAS) ---
     md_content += "## Resumo dos Campeões (Menor MAPE)\n\n"
     try:
         winners_idx = summary_df.groupby('dataset')['MAPE'].idxmin()
-        winners = summary_df.loc[winners_idx].sort_values('dataset')[['dataset', 'model_type', 'comparison_group', 'MAPE', 'MASE', 'RMSSE']]
+        # Seleciona e ordena as colunas na ordem desejada
+        winners = summary_df.loc[winners_idx].sort_values('dataset')[['comparison_group', 'model_type', 'dataset', 'MAPE', 'MASE', 'RMSSE']]
         
         winners_formatted = winners.copy()
-        winners_formatted.columns = ['Dataset', 'Modelo Vencedor', 'Grupo', 'MAPE', 'MASE', 'RMSSE']
+        # Renomeia
+        winners_formatted.columns = ['Grupo', 'Modelo', 'Dataset', 'MAPE', 'MASE', 'RMSSE']
+        
         for col in ['MAPE', 'MASE', 'RMSSE']:
             winners_formatted[col] = winners_formatted[col].apply(lambda x: f"**{x:.4f}**")
         
         md_content += winners_formatted.to_markdown(index=False)
-    except Exception: pass
+    except Exception as e: 
+        logging.error(f"Erro tabela vencedores: {e}")
+        pass
     md_content += "\n\n---\n\n"
 
-    # --- 4. Detalhes por Dataset ---
+    # --- SEÇÃO 2: DETALHES POR DATASET ---
     datasets = sorted(summary_df['dataset'].unique())
     metrics_to_show = ['MAPE', 'MASE', 'RMSSE']
     sort_mapping = {'benchmark_statistical': 0, 'benchmark_standalone_dl': 1, 'hybrid_direct': 2, 'hybrid_mimo': 3, 'hybrid_recursive': 4}
@@ -247,16 +243,26 @@ def generate_report(main_config: dict, successful_executions: list):
     for ds in datasets:
         md_content += f"## Dataset: {ds}\n\n"
         
-        # A. Gráficos Real vs Previsto
+        ds_forecasts = pd.DataFrame()
         if not forecasts_df_all.empty:
             ds_forecasts = forecasts_df_all[forecasts_df_all['dataset'] == ds]
-            if not ds_forecasts.empty:
-                plot_file = generate_actual_vs_predicted_plots(ds_forecasts, report_plot_dir, ds)
-                if plot_file:
-                    md_content += "### Comparativo Visual: Real vs Previsto\n\n"
-                    md_content += f"![Painel Real vs Previsto](plots/{plot_file})\n\n"
+
+        # A. Gráfico Destaque: Proposta vs Referência (NOVO)
+        if not ds_forecasts.empty:
+            prop_ref_plot = generate_proposal_vs_reference_plot(ds_forecasts, report_plot_dir, ds)
+            if prop_ref_plot:
+                md_content += "### Comparativo: Proposta vs Referência\n"
+                md_content += f"Comparação direta entre o modelo proposto (**Hybrid_MIMO_NBEATS_NF**) e a referência (**Hybrid_Direct_NBEATS_NF**).\n\n"
+                md_content += f"![Proposta vs Referência](plots/{prop_ref_plot})\n\n"
+
+        # B. Painel Geral: Real vs Previsto por Grupo
+        if not ds_forecasts.empty:
+            plot_file = generate_actual_vs_predicted_plots(ds_forecasts, report_plot_dir, ds)
+            if plot_file:
+                md_content += "### Visão Geral: Real vs Previsto (Todos os Grupos)\n\n"
+                md_content += f"![Painel Real vs Previsto](plots/{plot_file})\n\n"
         
-        # B. Tabelas de Ranking
+        # C. Tabelas de Ranking
         ds_df = summary_df[summary_df['dataset'] == ds].copy()
         
         for metric in metrics_to_show:
@@ -269,6 +275,7 @@ def generate_report(main_config: dict, successful_executions: list):
             ds_df['sort_key'] = ds_df['comparison_group'].map(sort_mapping).fillna(99)
             sorted_df = ds_df.sort_values(by=['sort_key', 'model_type']).reset_index(drop=True)
             
+            # Seleciona na ordem correta
             view_df = sorted_df[['comparison_group', 'model_type', 'dataset', metric]].copy()
             view_df.columns = ['Grupo', 'Modelo', 'Dataset', metric]
             
@@ -285,10 +292,9 @@ def generate_report(main_config: dict, successful_executions: list):
             final_table_df = pd.DataFrame(formatted_data.tolist(), columns=view_df.columns)
             md_content += final_table_df.to_markdown(index=False)
             md_content += "\n\n"
-
+        
         md_content += "---\n\n"
 
-    # Salva
     report_file = os.path.join(report_dir, f"relatorio_final_{datetime.now().strftime('%Y%m%d_%H%M')}.md")
     with open(report_file, 'w', encoding='utf-8') as f:
         f.write(md_content)
