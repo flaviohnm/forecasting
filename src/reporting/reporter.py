@@ -13,356 +13,284 @@ try:
     PLOTTING_ENABLED = True
 except ImportError:
     PLOTTING_ENABLED = False
-    logging.warning(
-        "Matplotlib não encontrado. Gráficos de horizonte não serão gerados no relatório."
-    )
+    logging.warning("Matplotlib não encontrado. Gráficos não serão gerados.")
 
 
 def calculate_pd(mape_base, mape_comp):
-    """Calcula a Diferença Percentual (PD) entre dois valores MAPE escalares."""
-    if mape_base is None or mape_comp is None or pd.isna(mape_base) or pd.isna(
-            mape_comp) or mape_base == 0:
+    if mape_base is None or mape_comp is None or pd.isna(mape_base) or pd.isna(mape_comp) or mape_base == 0:
         return np.nan
-    # PD = 100 * (MAPE_comp - MAPE_base) / MAPE_base
     return 100 * (mape_comp - mape_base) / mape_base
 
-
-def generate_horizon_plots(horizon_metrics_df,
-                           output_dir,
-                           dataset_name,
-                           plot_suffix=""):
+def generate_rank_boxplot(summary_df, output_dir):
     """
-    Gera gráficos de linha para métricas por horizonte para UM dataset e UM grupo de modelos.
+    Gera um boxplot mostrando a distribuição dos rankings de cada modelo
+    através de todos os datasets.
     """
-    if not PLOTTING_ENABLED or horizon_metrics_df.empty:
-        return {}
+    if not PLOTTING_ENABLED or summary_df.empty:
+        return None
 
-    plot_files = {}
-    metrics_to_plot = ['MAPE', 'MASE', 'RMSSE']
+    # 1. Calcular o Ranking para cada Dataset (Baseado no MAPE)
+    # Menor MAPE = Ranking 1
+    summary_df['rank'] = summary_df.groupby('dataset')['MAPE'].rank(ascending=True, method='min')
 
-    horizon_metrics_df.replace([np.inf, -np.inf], np.nan, inplace=True)
-    metrics_grouped = horizon_metrics_df.groupby(
-        ['model_type', 'horizon'])[['MAPE', 'MASE',
-                                    'RMSSE']].mean(numeric_only=True)
+    # 2. Preparar dados para o Boxplot
+    # Queremos ordenar os modelos no eixo X pelo ranking mediano (melhores à esquerda)
+    model_stats = summary_df.groupby('model_type')['rank'].median().sort_values()
+    sorted_models = model_stats.index.tolist()
 
-    max_horizon = horizon_metrics_df['horizon'].max()
-    horizon_ticks = np.arange(1, int(max_horizon) + 1)
-    model_types = horizon_metrics_df['model_type'].unique()
+    data_to_plot = []
+    for model in sorted_models:
+        ranks = summary_df[summary_df['model_type'] == model]['rank'].values
+        data_to_plot.append(ranks)
 
-    for metric in metrics_to_plot:
-        if metric not in metrics_grouped.columns:
-            continue
+    # 3. Plotar
+    plt.figure(figsize=(14, 8))
+    
+    # Cria o boxplot
+    box = plt.boxplot(data_to_plot, patch_artist=True, showfliers=True)
 
-        plt.figure(figsize=(10, 6))
+    # Estilização
+    colors = ['lightblue'] * len(data_to_plot)
+    for patch, color in zip(box['boxes'], colors):
+        patch.set_facecolor(color)
+        patch.set_alpha(0.7)
 
-        has_data = False
-        for model_type in model_types:
-            try:
-                data_to_plot = metrics_grouped.loc[model_type, metric].reindex(
-                    horizon_ticks)
-                if not data_to_plot.isnull().all():
-                    plt.plot(data_to_plot.index,
-                             data_to_plot.values,
-                             marker='o',
-                             markersize=4,
-                             linestyle='-',
-                             label=model_type)
-                    has_data = True
-            except KeyError:
-                continue
+    # Configuração dos Eixos
+    plt.xticks(range(1, len(sorted_models) + 1), sorted_models, rotation=45, ha='right', fontsize=10)
+    plt.ylabel("Posição no Ranking (1 = Melhor)", fontsize=12)
+    plt.xlabel("Modelos", fontsize=12)
+    plt.title("Distribuição dos Rankings de Cada Modelo (Acurácia Global)", fontsize=14, pad=20)
+    
+    # Adiciona grid vertical para facilitar leitura
+    plt.grid(axis='y', linestyle='--', alpha=0.6)
+    
+    # Inverte o eixo Y? Não, geralmente ranking 1 fica embaixo no eixo Y numérico, 
+    # mas visualmente queremos ver quem está mais perto de 1. O padrão do matplotlib (1 embaixo) funciona bem.
+    # Vamos apenas garantir que os ticks do eixo Y sejam inteiros
+    max_rank = summary_df['rank'].max()
+    plt.yticks(np.arange(1, max_rank + 2, 1))
+    plt.ylim(0.5, max_rank + 0.5)
 
-        if not has_data:
-            plt.close()
-            continue
+    plt.tight_layout()
 
-        plt.xlabel("Horizonte de Previsão (h)")
-        plt.ylabel(f"{metric}")
-        plt.title(f"Evolução do {metric} - {dataset_name}")
-        plt.legend(loc='center left',
-                   bbox_to_anchor=(1.02, 0.5),
-                   borderaxespad=0)
-        plt.grid(True, which='both', linestyle='--', linewidth=0.5)
-        plt.xticks(horizon_ticks)
-        plt.tight_layout(rect=[0, 0, 0.80, 1])
+    filename = "boxplot_rankings_global.png"
+    filepath = os.path.join(output_dir, filename)
+    
+    try:
+        plt.savefig(filepath, dpi=150)
+        plt.close()
+        print(f"  Gráfico de Boxplot salvo: {filename}")
+        return filename
+    except Exception as e:
+        logging.error(f"Erro ao salvar boxplot: {e}")
+        plt.close()
+        return None
 
-        clean_suffix = plot_suffix.replace(" ", "_").replace(".", "").replace(
-            "(", "").replace(")", "")
-        plot_filename = f"plot_horizon_{dataset_name}_{metric}_{clean_suffix}.png"
-        plot_filepath = os.path.join(output_dir, plot_filename)
+def generate_actual_vs_predicted_plots(forecasts_df, output_dir, dataset_name):
+    """
+    Gera um painel de gráficos (subplots) comparando REAL x PREVISTO.
+    """
+    if not PLOTTING_ENABLED or forecasts_df.empty:
+        return None
 
-        try:
-            plt.savefig(plot_filepath, dpi=150)
-            plt.close()
-            plot_files[metric] = plot_filename
-            print(f"  Gráfico salvo: {plot_filename}")
-        except Exception as e:
-            logging.error(f"Erro ao salvar gráfico {metric}: {e}")
-            plt.close()
+    order_precedence = {
+        'benchmark_statistical': 0,
+        'benchmark_standalone_dl': 1,
+        'hybrid_direct': 2,
+        'hybrid_mimo': 3,
+        'hybrid_recursive': 4
+    }
+    
+    unique_groups = forecasts_df['comparison_group'].unique()
+    sorted_groups = sorted(unique_groups, key=lambda x: order_precedence.get(x, 99))
+    n_groups = len(sorted_groups)
+    
+    if n_groups == 0: return None
 
-    return plot_files
+    fig, axes = plt.subplots(n_groups, 1, figsize=(12, 5 * n_groups), sharex=True)
+    if n_groups == 1: axes = [axes]
+    
+    fig.suptitle(f"Real vs Previsto por Grupo - {dataset_name}", fontsize=16, y=0.99)
+    
+    forecasts_df = forecasts_df.sort_values('date_index')
+    first_model = forecasts_df.iloc[0]['model_type']
+    real_data = forecasts_df[forecasts_df['model_type'] == first_model][['date_index', 'real']].drop_duplicates().set_index('date_index')
 
+    plot_filename = f"forecast_panel_{dataset_name}.png"
+    
+    for ax, group in zip(axes, sorted_groups):
+        group_data = forecasts_df[forecasts_df['comparison_group'] == group]
+        ax.plot(real_data.index, real_data['real'], color='black', linestyle='--', linewidth=2, label='REAL', alpha=0.6)
+        
+        models_in_group = sorted(group_data['model_type'].unique())
+        for model in models_in_group:
+            model_subset = group_data[group_data['model_type'] == model].set_index('date_index')
+            if not model_subset.empty:
+                ax.plot(model_subset.index, model_subset['previsao'], marker='.', markersize=4, linewidth=1.5, label=model, alpha=0.8)
+        
+        ax.set_title(f"Grupo: {group}", fontsize=12, fontweight='bold', loc='left')
+        ax.grid(True, linestyle=':', alpha=0.6)
+        ax.set_ylabel("Valor")
+        ax.legend(loc='center left', bbox_to_anchor=(1.01, 0.5), fontsize='small')
 
-def get_specific_horizons(max_horizon):
-    """Retorna uma lista de horizontes específicos para destacar com base no horizonte máximo."""
-    max_horizon = int(max_horizon)
-    if max_horizon >= 10: return [1, 5, 10]
-    elif max_horizon >= 7: return [1, 3, 7]
-    elif max_horizon >= 4: return [1, 2, 4]
-    else: return [1]
-
+    axes[-1].set_xlabel("Data")
+    plt.tight_layout(rect=[0, 0, 0.85, 0.97])
+    
+    plot_filepath = os.path.join(output_dir, plot_filename)
+    try:
+        plt.savefig(plot_filepath, dpi=100)
+        plt.close()
+        print(f"  Gráfico Real vs Previsto salvo: {plot_filename}")
+        return plot_filename
+    except Exception as e:
+        plt.close()
+        return None
 
 def generate_report(main_config: dict, successful_executions: list):
     """
-    Gera um relatório consolidado em Markdown com painéis de comparação, destaques e tabela de vencedores.
+    Gera um relatório consolidado.
     """
-    print("Iniciando a geração do relatório...")
+    print("Iniciando a geração do relatório estruturado...")
     metrics_path = main_config['results_paths']['metrics']
     plots_path = main_config['results_paths']['plots']
-    comparison_results_path = os.path.join("results", "comparison_tests")
     report_dir = "reports"
     report_plot_dir = os.path.join(report_dir, "plots")
     os.makedirs(report_dir, exist_ok=True)
     os.makedirs(report_plot_dir, exist_ok=True)
 
     all_metrics = []
-    all_horizon_metrics = []
+    all_forecasts = []
 
-    # 1. Coleta métricas
+    # 1. Coleta de Dados
     for dataset_conf, model_conf in successful_executions:
         execution_name = f"{dataset_conf['name']}_{model_conf['model_name']}"
-        metric_file = os.path.join(metrics_path,
-                                   f"metrics_{execution_name}.csv")
-        horizon_metric_file = os.path.join(
-            metrics_path, f"metrics_horizon_{execution_name}.csv")
-
+        metric_file = os.path.join(metrics_path, f"metrics_{execution_name}.csv")
+        forecast_file = os.path.join(plots_path, f"forecasts_{execution_name}.csv")
+        
         comparison_group = model_conf.get('comparison_group', 'other')
 
         if os.path.exists(metric_file):
             try:
                 df = pd.read_csv(metric_file)
-                if not df.empty and all(c in df.columns
-                                        for c in ['MAPE', 'MASE', 'RMSSE']):
+                if not df.empty:
                     df['comparison_group'] = comparison_group
                     all_metrics.append(df)
-            except Exception as e:
-                logging.warning(
-                    f"Erro ao ler métrica geral {metric_file}: {e}")
-
-        if os.path.exists(horizon_metric_file):
+            except Exception: pass
+        
+        if os.path.exists(forecast_file):
             try:
-                df_h = pd.read_csv(horizon_metric_file)
-                if not df_h.empty and 'horizon' in df_h.columns:
-                    df_h['model_type'] = model_conf['model_type']
-                    df_h['dataset'] = dataset_conf['name']
-                    df_h['comparison_group'] = comparison_group
-                    all_horizon_metrics.append(df_h)
-            except Exception as e:
-                logging.warning(
-                    f"Erro lendo métrica por horizonte {horizon_metric_file}: {e}"
-                )
+                df_f = pd.read_csv(forecast_file)
+                if not df_f.empty:
+                    date_col = df_f.columns[0]
+                    df_f.rename(columns={date_col: 'date_index'}, inplace=True)
+                    try: df_f['date_index'] = pd.to_datetime(df_f['date_index'])
+                    except: pass
+                    
+                    df_f['model_type'] = model_conf['model_type']
+                    df_f['dataset'] = dataset_conf['name']
+                    df_f['comparison_group'] = comparison_group
+                    cols_to_keep = ['date_index', 'real', 'previsao', 'model_type', 'dataset', 'comparison_group']
+                    cols_exist = [c for c in cols_to_keep if c in df_f.columns]
+                    all_forecasts.append(df_f[cols_exist])
+            except Exception: pass
 
     if not all_metrics:
-        print("Nenhuma métrica geral válida encontrada.")
+        print("Nenhuma métrica encontrada. Relatório abortado.")
         return
 
     summary_df = pd.concat(all_metrics, ignore_index=True)
-    summary_df = summary_df.sort_values(by=['dataset', 'MAPE'], ascending=True)
+    forecasts_df_all = pd.concat(all_forecasts, ignore_index=True) if all_forecasts else pd.DataFrame()
 
-    # --- CORREÇÃO AQUI: Adicionada a definição de sorted_df_for_plots ---
-    sorted_df_for_plots = summary_df.copy()
-    # -------------------------------------------------------------------
+    # --- FILTRO DE MODELOS ---
+    MODELS_TO_EXCLUDE = ['ETS', 'NAIVE', 'SEASONAL_NAIVE']
+    summary_df = summary_df[~summary_df['model_type'].isin(MODELS_TO_EXCLUDE)]
+    if not forecasts_df_all.empty:
+        forecasts_df_all = forecasts_df_all[~forecasts_df_all['model_type'].isin(MODELS_TO_EXCLUDE)]
 
-    horizon_df_all = pd.DataFrame()
-    if all_horizon_metrics:
-        horizon_df_all = pd.concat(all_horizon_metrics, ignore_index=True)
-        horizon_df_all.replace([np.inf, -np.inf], np.nan, inplace=True)
+    if summary_df.empty:
+        print("Todos os modelos foram filtrados. Relatório abortado.")
+        return
 
-    now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    report_content = f"""# Relatório de Experimentos de Forecasting
+    now = datetime.now().strftime("%Y-%m-%d %H:%M")
+    md_content = f"# Relatório de Experimentos de Forecasting\n\nGerado em: {now}\n\n"
+    
+    # --- 2. Análise Global (Boxplot) ---
+    md_content += "## Análise Global de Desempenho (Rankings)\n\n"
+    md_content += "O gráfico abaixo mostra a distribuição dos rankings de cada modelo através de todos os datasets testados. "
+    md_content += "Quanto mais baixa a caixa (mais perto de 1), melhor e mais consistente é o modelo.\n\n"
+    
+    boxplot_file = generate_rank_boxplot(summary_df, report_plot_dir)
+    if boxplot_file:
+        md_content += f"![Distribuição de Rankings](plots/{boxplot_file})\n\n"
+        md_content += "---\n\n"
 
-Gerado em: {now}
-
-**Reprodutibilidade:** Todos os modelos estocásticos foram executados com `seed=42`.
-
-## Painéis de Comparação por Abordagem
-
-Resultados agrupados por dataset e estratégia de modelo. 
-**Destaque:** O modelo com o menor MAPE em cada tabela está em **negrito**.
-"""
-
-    datasets_processed = sorted(summary_df['dataset'].unique())
-
-    benchmark_groups = ['benchmark_statistical', 'benchmark_standalone_dl']
-
-    comparison_panels = {
-        "Híbridos (MIMO) vs. Benchmarks":
-        benchmark_groups + ['hybrid_mimo'],
-        "Híbridos (Recursive) vs. Benchmarks":
-        benchmark_groups + ['hybrid_recursive'],
-        "Híbridos (Direct) vs. Benchmarks":
-        benchmark_groups + ['hybrid_direct']
-    }
-
-    # --- LOOP DE PAINÉIS ---
-    for panel_title, groups_to_include in comparison_panels.items():
-        report_content += f"\n### Painel: {panel_title}\n"
-
-        panel_df = summary_df[summary_df['comparison_group'].isin(
-            groups_to_include)]
-        panel_horizon_df_full = pd.DataFrame()
-        if not horizon_df_all.empty:
-            panel_horizon_df_full = horizon_df_all[
-                horizon_df_all['comparison_group'].isin(groups_to_include)]
-
-        if panel_df.empty:
-            report_content += "\n*Nenhum resultado encontrado para este painel.*\n"
-            continue
-
-        for ds_name in datasets_processed:
-            if ds_name not in panel_df['dataset'].unique():
-                continue
-
-            report_content += f"\n#### Dataset: {ds_name}\n\n"
-
-            ds_df = panel_df[panel_df['dataset'] == ds_name].copy()
-
-            base_mape = ds_df['MAPE'].min()
-            best_idx = ds_df['MAPE'].idxmin()
-
-            ds_df['PD_vs_Best (%)'] = ds_df['MAPE'].apply(lambda x: 100 * (
-                x - base_mape) / base_mape if base_mape > 0 else 0)
-
-            ds_df_display = ds_df.copy()
-            ds_df_display['MAPE'] = ds_df_display['MAPE'].map('{:.4f}'.format)
-            ds_df_display['MASE'] = ds_df_display['MASE'].map('{:.4f}'.format)
-            ds_df_display['RMSSE'] = ds_df_display['RMSSE'].map(
-                '{:.4f}'.format)
-            ds_df_display['PD_vs_Best (%)'] = ds_df_display[
-                'PD_vs_Best (%)'].apply(lambda x: f"{x:+.2f}"
-                                        if pd.notna(x) and x != 0 else '-')
-
-            ds_df_display.loc[best_idx, 'PD_vs_Best (%)'] = '-'
-
-            cols_to_bold = [
-                'execution_name', 'model_type', 'MAPE', 'MASE', 'RMSSE'
-            ]
-            for col in cols_to_bold:
-                if col in ds_df_display.columns:
-                    ds_df_display.loc[
-                        best_idx,
-                        col] = f"**{ds_df_display.loc[best_idx, col]}**"
-
-            cols_order = [
-                'execution_name', 'model_type', 'comparison_group', 'MAPE',
-                'MASE', 'RMSSE', 'PD_vs_Best (%)'
-            ]
-            cols_order = [
-                col for col in cols_order if col in ds_df_display.columns
-            ]
-            report_content += ds_df_display[cols_order].to_markdown(
-                index=False) + "\n\n"
-
-            # 2. Gráficos de Horizonte
-            if not panel_horizon_df_full.empty:
-                ds_panel_horizon = panel_horizon_df_full[
-                    panel_horizon_df_full['dataset'] == ds_name].copy()
-
-                if not ds_panel_horizon.empty:
-                    plot_suffix = f"{panel_title}_{ds_name}"
-                    plot_files = generate_horizon_plots(
-                        ds_panel_horizon, report_plot_dir, ds_name,
-                        plot_suffix)
-
-                    if plot_files:
-                        report_content += "**Evolução do Erro por Horizonte:**\n\n"
-                        for metric, filename in plot_files.items():
-                            relative_path = os.path.join("plots",
-                                                         filename).replace(
-                                                             "\\", "/")
-                            report_content += f"![{metric} - {panel_title}]({relative_path})\n"
-
-            report_content += "\n---\n"
-
-    # --- NOVA SEÇÃO: RESUMO DOS VENCEDORES ---
-    report_content += "\n## Resumo dos Vencedores por Dataset\n"
-    report_content += "Modelo com o menor MAPE encontrado entre **todas** as estratégias testadas.\n\n"
-
+    # --- 3. Resumo dos Campeões ---
+    md_content += "## Resumo dos Campeões (Menor MAPE)\n\n"
     try:
         winners_idx = summary_df.groupby('dataset')['MAPE'].idxmin()
-        winners_df = summary_df.loc[winners_idx].sort_values('dataset').copy()
+        winners = summary_df.loc[winners_idx].sort_values('dataset')[['dataset', 'model_type', 'comparison_group', 'MAPE', 'MASE', 'RMSSE']]
+        
+        winners_formatted = winners.copy()
+        winners_formatted.columns = ['Dataset', 'Modelo Vencedor', 'Grupo', 'MAPE', 'MASE', 'RMSSE']
+        for col in ['MAPE', 'MASE', 'RMSSE']:
+            winners_formatted[col] = winners_formatted[col].apply(lambda x: f"**{x:.4f}**")
+        
+        md_content += winners_formatted.to_markdown(index=False)
+    except Exception: pass
+    md_content += "\n\n---\n\n"
 
-        winners_df['MAPE'] = winners_df['MAPE'].map('{:.4f}'.format)
-        winners_df['MASE'] = winners_df['MASE'].map('{:.4f}'.format)
-        winners_df['RMSSE'] = winners_df['RMSSE'].map('{:.4f}'.format)
+    # --- 4. Detalhes por Dataset ---
+    datasets = sorted(summary_df['dataset'].unique())
+    metrics_to_show = ['MAPE', 'MASE', 'RMSSE']
+    sort_mapping = {'benchmark_statistical': 0, 'benchmark_standalone_dl': 1, 'hybrid_direct': 2, 'hybrid_mimo': 3, 'hybrid_recursive': 4}
 
-        cols_winner = [
-            'dataset', 'execution_name', 'model_type', 'comparison_group',
-            'MAPE', 'MASE', 'RMSSE'
-        ]
-        report_content += winners_df[cols_winner].to_markdown(
-            index=False) + "\n\n"
+    for ds in datasets:
+        md_content += f"## Dataset: {ds}\n\n"
+        
+        # A. Gráficos Real vs Previsto
+        if not forecasts_df_all.empty:
+            ds_forecasts = forecasts_df_all[forecasts_df_all['dataset'] == ds]
+            if not ds_forecasts.empty:
+                plot_file = generate_actual_vs_predicted_plots(ds_forecasts, report_plot_dir, ds)
+                if plot_file:
+                    md_content += "### Comparativo Visual: Real vs Previsto\n\n"
+                    md_content += f"![Painel Real vs Previsto](plots/{plot_file})\n\n"
+        
+        # B. Tabelas de Ranking
+        ds_df = summary_df[summary_df['dataset'] == ds].copy()
+        
+        for metric in metrics_to_show:
+            if metric not in ds_df.columns: continue
+            
+            md_content += f"### Tabela de Resultados: {metric}\n"
+            
+            best_val_global = ds_df[metric].min()
+            
+            ds_df['sort_key'] = ds_df['comparison_group'].map(sort_mapping).fillna(99)
+            sorted_df = ds_df.sort_values(by=['sort_key', 'model_type']).reset_index(drop=True)
+            
+            view_df = sorted_df[['comparison_group', 'model_type', 'dataset', metric]].copy()
+            view_df.columns = ['Grupo', 'Modelo', 'Dataset', metric]
+            
+            view_df[metric] = view_df[metric].apply(lambda x: f"{x:.4f}")
+            
+            def highlight_winner(row):
+                idx = row.name
+                val_float = sorted_df.iloc[idx][metric]
+                if abs(val_float - best_val_global) < 1e-9:
+                    return [f"**{cell}**" for cell in row]
+                return row.tolist()
 
-    except Exception as e:
-        logging.error(f"Erro ao gerar tabela de vencedores: {e}")
-        report_content += "*Erro ao gerar tabela de vencedores.*\n"
+            formatted_data = view_df.apply(highlight_winner, axis=1)
+            final_table_df = pd.DataFrame(formatted_data.tolist(), columns=view_df.columns)
+            md_content += final_table_df.to_markdown(index=False)
+            md_content += "\n\n"
 
-    # --- TESTES ESTATÍSTICOS ---
-    report_content += "\n## Testes de Comparação Estatística\n"
+        md_content += "---\n\n"
 
-    dm_summary_file = os.path.join(comparison_results_path,
-                                   "diebold_mariano_summary.csv")
-    dm_content = "\n*Resultados do teste Diebold-Mariano não encontrados.*\n"
-    if os.path.exists(dm_summary_file):
-        try:
-            dm_df = pd.read_csv(dm_summary_file)
-            dm_df['p_value'] = dm_df['p_value'].map('{:.4f}'.format)
-            dm_df['dm_statistic'] = dm_df['dm_statistic'].map('{:.3f}'.format)
-            dm_content = "\n### Teste Diebold-Mariano (Comparação Par-a-Par)\n*Compara o melhor modelo contra os outros por dataset.*\n\n"
-            for dataset_name in sorted(dm_df['dataset'].unique()):
-                dm_content += f"**Dataset: {dataset_name}**\n" + dm_df[
-                    dm_df['dataset'] == dataset_name].to_markdown(
-                        index=False) + "\n\n"
-        except Exception as e:
-            dm_content = f"\n*Erro DM: {e}*\n"
-    report_content += dm_content
-
-    friedman_file = os.path.join(comparison_results_path,
-                                 "friedman_test_summary.csv")
-    nemenyi_file = os.path.join(comparison_results_path,
-                                "nemenyi_posthoc_pvalues.csv")
-    friedman_content = "\n*Resultados Friedman não encontrados.*\n"
-    if os.path.exists(friedman_file):
-        try:
-            friedman_df = pd.read_csv(friedman_file)
-            friedman_content = "\n### Teste de Friedman e Nemenyi (Global)\n"
-            friedman_content += "**Friedman:**\n" + friedman_df.to_markdown(
-                index=False) + "\n\n"
-            if os.path.exists(
-                    nemenyi_file) and not friedman_df.empty and friedman_df[
-                        'significativo (p<0.05)'].iloc[0]:
-                nemenyi_df = pd.read_csv(nemenyi_file, index_col=0)
-                friedman_content += "**Post-Hoc Nemenyi (p-valores):**\n" + nemenyi_df.round(
-                    4).to_markdown() + "\n\n"
-        except Exception as e:
-            friedman_content = f"\n*Erro Friedman: {e}*\n"
-    report_content += friedman_content
-
-    # --- GRÁFICOS INDIVIDUAIS (Apêndice) ---
-    report_content += "\n## Gráficos Detalhados por Execução (Completo - Apêndice)\n"
-    for index, row in sorted_df_for_plots.iterrows():
-        exec_name = row['execution_name']
-        plot_filename = f"plot_{exec_name}.png"
-        relative_plot_path = os.path.join('..', 'results', 'plots',
-                                          plot_filename).replace("\\", "/")
-        plot_abs_path = os.path.join(main_config['results_paths']['plots'],
-                                     plot_filename)
-        if os.path.exists(plot_abs_path):
-            plot_markdown = f"![Gráfico para {exec_name}]({relative_plot_path})"
-            report_content += f"\n### Execução: {exec_name}\n\n{plot_markdown}\n"
-
-    # Salva o relatório
-    report_filename = f"relatorio_{datetime.now().strftime('%Y%m%d_%H%M%S')}.md"
-    report_filepath = os.path.join(report_dir, report_filename)
-    with open(report_filepath, 'w', encoding='utf-8') as f:
-        f.write(report_content)
-    print(f"Relatório gerado com sucesso em: {report_filepath}")
+    # Salva
+    report_file = os.path.join(report_dir, f"relatorio_final_{datetime.now().strftime('%Y%m%d_%H%M')}.md")
+    with open(report_file, 'w', encoding='utf-8') as f:
+        f.write(md_content)
+    
+    print(f"Relatório gerado em: {report_file}")

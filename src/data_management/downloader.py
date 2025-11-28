@@ -62,12 +62,12 @@ def load_from_statsmodels(dataset_name: str, file_path: str):
                 df = sm.datasets.sunspots.load_pandas().data # Geralmente já vem com statsmodels
                 # CORREÇÃO: Usa a coluna 'YEAR' para criar o índice
                 series = pd.Series(df['SUNACTIVITY'].values, index=pd.to_datetime(df['YEAR'], format='%Y'), name="Sunspots")
-                series.index.freq = 'AS-JAN'
+                series.index.freq = 'YS-JAN'
             elif dataset_name == 'Nile':
                 df = sm.datasets.nile.load_pandas().data # Geralmente já vem com statsmodels
                 # CORREÇÃO: Usa a coluna 'year' para criar o índice
                 series = pd.Series(df['volume'].values, index=pd.to_datetime(df['year'], format='%Y'), name="Nile")
-                series.index.freq = 'AS-JAN'
+                series.index.freq = 'YS-JAN'
             elif dataset_name == 'ukdriverdeaths':
                 df = sm.datasets.get_rdataset("UKDriverDeaths", cache=True).data
                 series = pd.Series(df['value'].values, index=pd.date_range(start='1969-01-01', periods=len(df), freq='MS'), name="UKDriverDeaths")
