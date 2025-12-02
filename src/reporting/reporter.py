@@ -6,6 +6,8 @@ import numpy as np
 from datetime import datetime
 import logging
 import matplotlib
+from scipy import stats
+
 # Garante backend não interativo para plotagem
 try:
     matplotlib.use('Agg')
@@ -22,15 +24,33 @@ def calculate_pd(mape_base, mape_comp):
         return np.nan
     return 100 * (mape_comp - mape_base) / mape_base
 
+# --- FUNÇÃO AUXILIAR: CÁLCULO DO DIEBOLD-MARIANO ---
+def calculate_dm_statistic(actual, pred_base, pred_comp):
+    """
+    Calcula a estatística Diebold-Mariano entre duas previsões (Base vs Comparado).
+    Usa Perda Absoluta (MAE).
+    """
+    try:
+        e_base = np.abs(actual - pred_base)
+        e_comp = np.abs(actual - pred_comp)
+        d = e_base - e_comp
+        mean_d = np.mean(d)
+        var_d = np.var(d, ddof=1)
+        if var_d == 0: return np.nan, np.nan
+        n = len(d)
+        dm_stat = mean_d / np.sqrt(var_d / n)
+        p_value = 2 * (1 - stats.norm.cdf(np.abs(dm_stat)))
+        return dm_stat, p_value
+    except:
+        return np.nan, np.nan
+
 # --- FUNÇÃO 1: BOXPLOT DE RANKINGS (GLOBAL) ---
 def generate_rank_boxplot(summary_df, output_dir):
     if not PLOTTING_ENABLED or summary_df.empty: return None
 
-    # Calcula Ranking por Dataset
     df_ranked = summary_df.copy()
     df_ranked['rank'] = df_ranked.groupby('dataset')['MAPE'].rank(ascending=True, method='min')
 
-    # Ordena modelos pela mediana do ranking
     model_stats = df_ranked.groupby('model_type')['rank'].median().sort_values()
     sorted_models = model_stats.index.tolist()
 
@@ -67,7 +87,7 @@ def generate_rank_boxplot(summary_df, output_dir):
         plt.close()
         return None
 
-# --- FUNÇÃO 2: GRÁFICO DE PD (PERCENTAGE DIFFERENCE) ---
+# --- FUNÇÃO 2: GRÁFICO DE PD ---
 def generate_pd_plot(metrics_df, output_dir, dataset_name):
     if not PLOTTING_ENABLED or metrics_df.empty: return None
     if 'MAPE' not in metrics_df.columns: return None
@@ -139,12 +159,10 @@ def generate_proposal_vs_reference_plot(forecasts_df, output_dir, dataset_name):
     plt.figure(figsize=(12, 6))
     plt.plot(real_data.index, real_data['real'], color='black', linestyle='--', linewidth=2, label='Valor Real', alpha=0.6)
     
-    # Referência
     ref_data = subset_df[subset_df['model_type'] == REFERENCE_MODEL].set_index('date_index')
     if not ref_data.empty:
         plt.plot(ref_data.index, ref_data['previsao'], color='#ff7f0e', marker='x', markersize=6, linestyle='-', label=f'Ref: {REFERENCE_MODEL}', alpha=0.9)
 
-    # Proposta
     prop_data = subset_df[subset_df['model_type'] == PROPOSED_MODEL].set_index('date_index')
     if not prop_data.empty:
         plt.plot(prop_data.index, prop_data['previsao'], color='#1f77b4', marker='o', markersize=5, linestyle='-', label=f'Prop: {PROPOSED_MODEL}', alpha=0.9)
@@ -163,7 +181,7 @@ def generate_proposal_vs_reference_plot(forecasts_df, output_dir, dataset_name):
         plt.close()
         return None
 
-# --- FUNÇÃO 4: PAINEL REAL VS PREVISTO (FACETADO) ---
+# --- FUNÇÃO 4: PAINEL REAL VS PREVISTO ---
 def generate_actual_vs_predicted_plots(forecasts_df, output_dir, dataset_name):
     if not PLOTTING_ENABLED or forecasts_df.empty: return None
 
@@ -209,10 +227,9 @@ def generate_actual_vs_predicted_plots(forecasts_df, output_dir, dataset_name):
 
 # --- FUNÇÃO PRINCIPAL ---
 def generate_report(main_config: dict, successful_executions: list):
-    print("Iniciando a geração do relatório completo...")
+    print("Iniciando a geração do relatório estruturado...")
     metrics_path = main_config['results_paths']['metrics']
     plots_path = main_config['results_paths']['plots']
-    comparison_results_path = os.path.join("results", "comparison_tests")
     report_dir = "reports"
     report_plot_dir = os.path.join(report_dir, "plots")
     os.makedirs(report_dir, exist_ok=True)
@@ -220,13 +237,6 @@ def generate_report(main_config: dict, successful_executions: list):
 
     all_metrics = []
     all_forecasts = []
-    
-    # Carrega estatísticas par-a-par (Diebold-Mariano)
-    dm_df_all = pd.DataFrame()
-    dm_file = os.path.join(comparison_results_path, "diebold_mariano_summary.csv")
-    if os.path.exists(dm_file):
-        try: dm_df_all = pd.read_csv(dm_file)
-        except: pass
 
     for dataset_conf, model_conf in successful_executions:
         execution_name = f"{dataset_conf['name']}_{model_conf['model_name']}"
@@ -259,7 +269,7 @@ def generate_report(main_config: dict, successful_executions: list):
             except: pass
 
     if not all_metrics:
-        print("Nenhuma métrica encontrada.")
+        print("Nenhuma métrica encontrada. Relatório abortado.")
         return
 
     summary_df = pd.concat(all_metrics, ignore_index=True)
@@ -270,12 +280,9 @@ def generate_report(main_config: dict, successful_executions: list):
     summary_df = summary_df[~summary_df['model_type'].isin(MODELS_TO_EXCLUDE)]
     if not forecasts_df_all.empty:
         forecasts_df_all = forecasts_df_all[~forecasts_df_all['model_type'].isin(MODELS_TO_EXCLUDE)]
-    if not dm_df_all.empty:
-        dm_df_all = dm_df_all[~dm_df_all['modelo_base'].isin(MODELS_TO_EXCLUDE)]
-        dm_df_all = dm_df_all[~dm_df_all['modelo_comparado'].isin(MODELS_TO_EXCLUDE)]
 
     if summary_df.empty:
-        print("Todos os modelos filtrados.")
+        print("Todos os modelos foram filtrados. Relatório abortado.")
         return
 
     now = datetime.now().strftime("%Y-%m-%d %H:%M")
@@ -295,8 +302,6 @@ def generate_report(main_config: dict, successful_executions: list):
 
     # --- 2. ANÁLISE GLOBAL (BOXPLOT) ---
     md_content += "## 2. Análise Global\n\n"
-    
-    # Boxplot
     boxplot_file = generate_rank_boxplot(summary_df, report_plot_dir)
     if boxplot_file:
         md_content += "### Consistência dos Rankings\n"
@@ -319,15 +324,48 @@ def generate_report(main_config: dict, successful_executions: list):
         if pd_plot:
             md_content += f"**Performance Relativa (PD):**\n\n![PD](plots/{pd_plot})\n\n"
 
-        # B. TABELA ESTATÍSTICA (DM)
-        if not dm_df_all.empty:
-            ds_dm = dm_df_all[dm_df_all['dataset'] == ds]
-            if not ds_dm.empty:
-                md_content += "**Teste Diebold-Mariano:**\n\n"
-                tbl = ds_dm[['modelo_comparado', 'dm_statistic', 'p_value']].copy()
-                tbl.columns = ['Modelo', 'DM Stat', 'p-Value']
-                tbl['p-Value'] = tbl['p-Value'].apply(lambda x: f"{x:.2E}")
-                md_content += tbl.to_markdown(index=False) + "\n\n"
+        # B. TABELA ESTATÍSTICA (DM) - CORRIGIDA
+        if not ds_forc.empty and not ds_df.empty:
+            winner_model_type = ds_df.loc[ds_df['MAPE'].idxmin()]['model_type']
+            md_content += f"**Teste Diebold-Mariano (Referência Global: {winner_model_type})**\n\n"
+            md_content += "Comparação de todos os modelos do dataset contra o **Campeão Global**. "
+            md_content += "Valores negativos de DM indicam que a Referência (Campeão) é melhor que o Modelo Comparado.\n\n"
+            
+            try:
+                # Pega dados do vencedor
+                winner_preds_series = ds_forc[ds_forc['model_type'] == winner_model_type].sort_values('date_index')
+                winner_preds = winner_preds_series['previsao'].values
+                real_vals = winner_preds_series['real'].values
+                
+                if len(real_vals) > 0:
+                    dm_dataset_list = []
+                    groups_in_ds = ds_df['comparison_group'].unique()
+                    groups_sorted = sorted(groups_in_ds, key=lambda x: sort_mapping.get(x, 99))
+                    
+                    for group in groups_sorted:
+                        group_df = ds_df[ds_df['comparison_group'] == group]
+                        models_in_group = group_df['model_type'].unique()
+                        
+                        for model in models_in_group:
+                            if model == winner_model_type: continue
+                            
+                            other_preds = ds_forc[ds_forc['model_type'] == model].sort_values('date_index')['previsao'].values
+                            
+                            if len(other_preds) == len(real_vals):
+                                dm_stat, p_val = calculate_dm_statistic(real_vals, winner_preds, other_preds)
+                                dm_dataset_list.append({
+                                    'Grupo': group,
+                                    'Modelo Comparado': model, # NOME CORRIGIDO
+                                    'DM Stat': f"{dm_stat:.3f}",
+                                    'p-Value': f"{p_val:.2E}"
+                                })
+                    
+                    if dm_dataset_list:
+                        md_content += pd.DataFrame(dm_dataset_list).to_markdown(index=False) + "\n\n"
+                    else:
+                        md_content += "*Dados insuficientes para teste DM.*\n\n"
+            except: 
+                md_content += "*Erro no cálculo do DM.*\n\n"
 
         # C. PROPOSTA VS REFERÊNCIA
         if not ds_forc.empty:
