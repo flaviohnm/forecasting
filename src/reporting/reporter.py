@@ -26,10 +26,6 @@ def calculate_pd(mape_base, mape_comp):
 
 # --- FUNÇÃO AUXILIAR: CÁLCULO DO DIEBOLD-MARIANO ---
 def calculate_dm_statistic(actual, pred_base, pred_comp):
-    """
-    Calcula a estatística Diebold-Mariano entre duas previsões (Base vs Comparado).
-    Usa Perda Absoluta (MAE).
-    """
     try:
         e_base = np.abs(actual - pred_base)
         e_comp = np.abs(actual - pred_comp)
@@ -44,7 +40,40 @@ def calculate_dm_statistic(actual, pred_base, pred_comp):
     except:
         return np.nan, np.nan
 
-# --- FUNÇÃO 1: BOXPLOT DE RANKINGS (GLOBAL) ---
+# --- FUNÇÃO: MATRIZ CONSOLIDADA ---
+def generate_consolidated_matrix(summary_df, metric='MAPE'):
+    if summary_df.empty: return "Sem dados."
+
+    pivot_df = summary_df.pivot_table(
+        index=['comparison_group', 'model_type'], 
+        columns='dataset', 
+        values=metric,
+        aggfunc='first'
+    )
+
+    sort_mapping = {
+        'benchmark_statistical': 0,
+        'benchmark_standalone_dl': 1,
+        'hybrid_direct': 2,
+        'hybrid_mimo': 3,
+        'hybrid_recursive': 4
+    }
+    
+    pivot_df = pivot_df.sort_index(key=lambda x: x.map(sort_mapping) if x.name == 'comparison_group' else x)
+
+    def highlight_min(s):
+        is_min = s == s.min()
+        return [f"**{v:.4f}**" if is_min_val and pd.notna(v) else f"{v:.4f}" if pd.notna(v) else "-" 
+                for v, is_min_val in zip(s, is_min)]
+
+    formatted_df = pivot_df.apply(highlight_min, axis=0)
+    formatted_df = formatted_df.reset_index()
+    formatted_df.columns.name = None 
+    formatted_df.rename(columns={'comparison_group': 'Grupo', 'model_type': 'Modelo'}, inplace=True)
+
+    return formatted_df.to_markdown(index=False)
+
+# --- FUNÇÃO: BOXPLOT DE RANKINGS ---
 def generate_rank_boxplot(summary_df, output_dir):
     if not PLOTTING_ENABLED or summary_df.empty: return None
 
@@ -87,7 +116,7 @@ def generate_rank_boxplot(summary_df, output_dir):
         plt.close()
         return None
 
-# --- FUNÇÃO 2: GRÁFICO DE PD ---
+# --- FUNÇÃO: GRÁFICO DE PD ---
 def generate_pd_plot(metrics_df, output_dir, dataset_name):
     if not PLOTTING_ENABLED or metrics_df.empty: return None
     if 'MAPE' not in metrics_df.columns: return None
@@ -137,7 +166,7 @@ def generate_pd_plot(metrics_df, output_dir, dataset_name):
         plt.close()
         return None
 
-# --- FUNÇÃO 3: PLOT PROPOSTA VS REFERÊNCIA ---
+# --- FUNÇÃO: PLOT PROPOSTA VS REFERÊNCIA ---
 def generate_proposal_vs_reference_plot(forecasts_df, output_dir, dataset_name):
     if not PLOTTING_ENABLED or forecasts_df.empty: return None
     
@@ -149,7 +178,6 @@ def generate_proposal_vs_reference_plot(forecasts_df, output_dir, dataset_name):
     
     subset_df = subset_df.sort_values('date_index')
     
-    # Dados Reais
     if not subset_df[subset_df['model_type'] == PROPOSED_MODEL].empty:
         base_model = PROPOSED_MODEL
     else:
@@ -181,7 +209,7 @@ def generate_proposal_vs_reference_plot(forecasts_df, output_dir, dataset_name):
         plt.close()
         return None
 
-# --- FUNÇÃO 4: PAINEL REAL VS PREVISTO ---
+# --- FUNÇÃO: PAINEL REAL VS PREVISTO ---
 def generate_actual_vs_predicted_plots(forecasts_df, output_dir, dataset_name):
     if not PLOTTING_ENABLED or forecasts_df.empty: return None
 
@@ -300,18 +328,24 @@ def generate_report(main_config: dict, successful_executions: list):
     except: pass
     md_content += "\n\n---\n\n"
 
-    # --- 2. ANÁLISE GLOBAL (BOXPLOT) ---
-    md_content += "## 2. Análise Global\n\n"
+    # --- 2. MATRIZES CONSOLIDADAS ---
+    md_content += "## 2. Matrizes Consolidadas de Performance\n\n"
+    md_content += "### Matriz MAPE\n" + generate_consolidated_matrix(summary_df, metric='MAPE') + "\n\n"
+    md_content += "### Matriz MASE\n" + generate_consolidated_matrix(summary_df, metric='MASE') + "\n\n"
+    md_content += "### Matriz RMSSE\n" + generate_consolidated_matrix(summary_df, metric='RMSSE') + "\n\n"
+    md_content += "---\n\n"
+
+    # --- 3. ANÁLISE GLOBAL (BOXPLOT) ---
+    md_content += "## 3. Análise Global\n\n"
     boxplot_file = generate_rank_boxplot(summary_df, report_plot_dir)
     if boxplot_file:
         md_content += "### Consistência dos Rankings\n"
         md_content += f"![Boxplot](plots/{boxplot_file})\n\n"
     md_content += "---\n\n"
 
-    # --- 3. DETALHES POR DATASET ---
-    md_content += "## 3. Detalhamento por Dataset\n\n"
+    # --- 4. DETALHES POR DATASET ---
+    md_content += "## 4. Detalhamento por Dataset\n\n"
     datasets = sorted(summary_df['dataset'].unique())
-    metrics = ['MAPE', 'MASE', 'RMSSE']
     sort_mapping = {'benchmark_statistical': 0, 'benchmark_standalone_dl': 1, 'hybrid_direct': 2, 'hybrid_mimo': 3, 'hybrid_recursive': 4}
 
     for ds in datasets:
@@ -324,15 +358,12 @@ def generate_report(main_config: dict, successful_executions: list):
         if pd_plot:
             md_content += f"**Performance Relativa (PD):**\n\n![PD](plots/{pd_plot})\n\n"
 
-        # B. TABELA ESTATÍSTICA (DM) - CORRIGIDA
+        # B. TABELA ESTATÍSTICA (DM)
         if not ds_forc.empty and not ds_df.empty:
             winner_model_type = ds_df.loc[ds_df['MAPE'].idxmin()]['model_type']
             md_content += f"**Teste Diebold-Mariano (Referência Global: {winner_model_type})**\n\n"
-            md_content += "Comparação de todos os modelos do dataset contra o **Campeão Global**. "
-            md_content += "Valores negativos de DM indicam que a Referência (Campeão) é melhor que o Modelo Comparado.\n\n"
             
             try:
-                # Pega dados do vencedor
                 winner_preds_series = ds_forc[ds_forc['model_type'] == winner_model_type].sort_values('date_index')
                 winner_preds = winner_preds_series['previsao'].values
                 real_vals = winner_preds_series['real'].values
@@ -355,17 +386,14 @@ def generate_report(main_config: dict, successful_executions: list):
                                 dm_stat, p_val = calculate_dm_statistic(real_vals, winner_preds, other_preds)
                                 dm_dataset_list.append({
                                     'Grupo': group,
-                                    'Modelo Comparado': model, # NOME CORRIGIDO
+                                    'Modelo Comparado': model,
                                     'DM Stat': f"{dm_stat:.3f}",
                                     'p-Value': f"{p_val:.2E}"
                                 })
                     
                     if dm_dataset_list:
                         md_content += pd.DataFrame(dm_dataset_list).to_markdown(index=False) + "\n\n"
-                    else:
-                        md_content += "*Dados insuficientes para teste DM.*\n\n"
-            except: 
-                md_content += "*Erro no cálculo do DM.*\n\n"
+            except: pass
 
         # C. PROPOSTA VS REFERÊNCIA
         if not ds_forc.empty:
@@ -378,26 +406,6 @@ def generate_report(main_config: dict, successful_executions: list):
             if panel_plot:
                 md_content += f"**Visão Geral: Real vs Previsto**\n\n![Panel](plots/{panel_plot})\n\n"
 
-        # E. TABELAS DE RANKING
-        for m in metrics:
-            if m not in ds_df.columns: continue
-            md_content += f"**Ranking {m}:**\n\n"
-            best_val = ds_df[m].min()
-            ds_df['sort'] = ds_df['comparison_group'].map(sort_mapping).fillna(99)
-            sorted_df = ds_df.sort_values(by=['sort', 'model_type'])
-            
-            view = sorted_df[['comparison_group', 'model_type', 'dataset', m]].copy()
-            view.columns = ['Grupo', 'Modelo', 'Dataset', m]
-            view[m] = view[m].apply(lambda x: f"{x:.4f}")
-            
-            def bold(row):
-                if abs(sorted_df.loc[row.name, m] - best_val) < 1e-9:
-                    return [f"**{x}**" for x in row]
-                return row.tolist()
-            
-            final_tbl = pd.DataFrame(view.apply(bold, axis=1).tolist(), columns=view.columns)
-            md_content += final_tbl.to_markdown(index=False) + "\n\n"
-        
         md_content += "---\n"
 
     report_file = os.path.join(report_dir, f"relatorio_final_{datetime.now().strftime('%Y%m%d_%H%M')}.md")
