@@ -113,3 +113,16 @@ datasets:
     seasonal_period: 12             
     preprocessing:
       scaler: "standard"
+      
+  - name: "ETTh1"
+    source: "external"                # Marcado como externo pois não vem do statsmodels
+    url: "https://raw.githubusercontent.com/zhouhaoyi/ETDataset/main/ETT-small/ETTh1.csv"
+    filename: "ETTh1.csv"
+    target_column: "OT"               # "OT" é o Oil Temperature, o alvo padrão desse dataset
+    date_column: "date"
+    split_date: "2018-01-01"          # O dataset vai de 2016 a 2018
+    log_transform: False
+    forecast_horizon: 24              # Para dados horários, 24h é um horizonte comum
+    seasonal_period: 24               # Sazonalidade diária (24 horas)
+    preprocessing:
+      scaler: "standard"      
