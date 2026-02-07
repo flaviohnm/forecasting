@@ -16,8 +16,6 @@ pmdarima==2.0.4         # (Opcional, pois estamos usando StatsForecast, mas bom 
 statsforecast==1.7.5    # MOTOR PRINCIPAL dos modelos estatísticos (ARIMA/ETS)
 
 # --- Deep Learning Backend (Fase 2 - Resíduos Não-Lineares) ---
-torch==2.3.1            # Backend do NeuralForecast
-pytorch-lightning==2.3.0
 neuralforecast==1.7.2   # MOTOR PRINCIPAL dos modelos N-HiTS e N-BEATS
 
 # --- Legacy / Outros Backends ---
