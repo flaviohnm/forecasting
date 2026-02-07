@@ -1,20 +1,23 @@
 #!/bin/bash
+
+# Garante que o script pare se houver erro crítico
+set -e
+
 echo "--- Limpando Ambiente Virtual Antigo ---"
 
-# Verifica se o ambiente virtual está ativo e tenta desativá-lo
-if command -v deactivate &> /dev/null
-then
+# Tenta desativar apenas se a função existir no shell atual
+if type deactivate >/dev/null 2>&1; then
     echo "Desativando ambiente virtual..."
-    deactivate
+    deactivate || true
 fi
 
 # Verifica se a pasta .venv existe e a remove
 if [ -d ".venv" ]; then
-    echo "Removendo a pasta .venv antiga..."
+    echo "🗑️  Removendo a pasta .venv antiga..."
     rm -rf .venv
-    echo "Pasta .venv removida com sucesso."
+    echo "✅ Pasta .venv removida com sucesso."
 else
-    echo "Nenhuma pasta .venv encontrada para remover."
+    echo "ℹ️  Nenhuma pasta .venv encontrada para remover."
 fi
 
 echo "--- Limpeza concluída ---"
