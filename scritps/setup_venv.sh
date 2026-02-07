@@ -42,3 +42,4 @@ pip install -r requirements.txt
 
 echo "✅ Tudo pronto! Para ativar manualmente no futuro, use:"
 echo "   source .venv/bin/activate"
+
