@@ -1,115 +1,50 @@
-# File: configs/main_config.yaml
+# config/main_config.yaml
+project_name: "Time Series Forecasting Pipeline"
 
-# --- NOVA SEÇÃO ---
-hpo_config:
-  n_trials: 3       # Número de tentativas de HPO por modelo. 50-100 é um bom começo.
-  validation_percentage: 0.2 # Usará os últimos 20% dos dados de treino para validação
-
-# Caminhos principais do projeto
-data_paths:
-  raw: "./data/raw/"
-  processed: "./data/processed/"
-
+# Mapeamento de Pastas (Rastreabilidade)
 results_paths:
-  metrics: "./results/metrics/"
-  plots: "./results/plots/"
+  #comparison: "results/comparison/"
+  diagnostics: "results/diagnostics/"
+  forecasts: "results/forecasts/"
+  metrics: "results/metrics/"
+  plots: "results/plots/"
+  reports: "results/reports/"
+  saved_models: "results/saved_models/"
 
-models_path: "saved_models/"
+# Configurações Globais
+random_seed: 42
 
-# Lista de datasets disponíveis (TODOS via statsmodels)
+# Definição dos Datasets (Com links para download automático)
 datasets:
-  - name: "AirPassengers"
-    source: "statsmodels"
-    filename: "airpassengers.csv"
-    target_column: "AirPassengers"
+  ETTh1:
+    path: "data/ETTh1.csv"
+    download_url: "https://raw.githubusercontent.com/zhouhaoyi/ETDataset/main/ETT-small/ETTh1.csv"
+    target_column: "OT"
     date_column: "date"
-    split_date: "1958-01-01"
-    log_transform: True
-    forecast_horizon: 10
-    seasonal_period: 12
-    preprocessing:
-      scaler: "standard"
+    freq: "h"
+    forecast_horizon: [96, 192, 336, 720]
+    test_size: 2880
+    val_size: 720
+    seasonal_period: 24
 
-  - name: "sunspots"                
-    source: "statsmodels"
-    filename: "sunspots.csv"        
-    target_column: "Sunspots"       
+  ETTh2:
+    path: "data/ETTh2.csv"
+    download_url: "https://raw.githubusercontent.com/zhouhaoyi/ETDataset/main/ETT-small/ETTh2.csv"
+    target_column: "OT"
     date_column: "date"
-    split_date: "1950-01-01"
-    log_transform: False
-    forecast_horizon: 10
-    seasonal_period: 1              
-    preprocessing:
-      scaler: "minmax"
+    freq: "h"
+    forecast_horizon: [96, 192, 336, 720]
+    test_size: 2880
+    val_size: 720
+    seasonal_period: 24
 
-  - name: "co2"                     
-    source: "statsmodels"
-    filename: "co2.csv"             
-    target_column: "CO2"            
+  ETTm1:
+    path: "data/ETTm1.csv"
+    download_url: "https://raw.githubusercontent.com/zhouhaoyi/ETDataset/main/ETT-small/ETTm1.csv"
+    target_column: "OT"
     date_column: "date"
-    split_date: "1995-01-01"
-    log_transform: False
-    forecast_horizon: 10
-    seasonal_period: 12             
-    preprocessing:
-      scaler: "standard"
-
-  - name: "nottem"
-    source: "statsmodels"
-    filename: "nottem.csv"
-    target_column: "NottinghamTemp"
-    date_column: "date"
-    split_date: "1935-01-01"
-    log_transform: False
-    forecast_horizon: 10
-    seasonal_period: 12
-    preprocessing:
-      scaler: "standard"
-
-  - name: "JohnsonJohnson"
-    source: "statsmodels"
-    filename: "jj_earnings.csv"
-    target_column: "JohnsonJohnson"
-    date_column: "date"
-    split_date: "1978-01-01"
-    log_transform: True
-    forecast_horizon: 10
-    seasonal_period: 4              
-    preprocessing:
-      scaler: "standard"
-
-  - name: "UKgas"
-    source: "statsmodels"
-    filename: "uk_gas.csv"
-    target_column: "UKGas"
-    date_column: "date"
-    split_date: "1982-01-01"
-    log_transform: True
-    forecast_horizon: 10
-    seasonal_period: 4              
-    preprocessing:
-      scaler: "standard"
-
-  - name: "Nile"
-    source: "statsmodels"
-    filename: "nile_volume.csv"
-    target_column: "Nile"
-    date_column: "date"
-    split_date: "1950-01-01"
-    log_transform: False
-    forecast_horizon: 10
-    seasonal_period: 1              
-    preprocessing:
-      scaler: "standard"
-
-  - name: "ukdriverdeaths"
-    source: "statsmodels"
-    filename: "uk_driver_deaths.csv"
-    target_column: "UKDriverDeaths"
-    date_column: "date"
-    split_date: "1980-01-01"
-    log_transform: False
-    forecast_horizon: 10
-    seasonal_period: 12             
-    preprocessing:
-      scaler: "standard"
+    freq: "t"  # 15 minutos
+    forecast_horizon: [96, 192, 336, 720]
+    test_size: 2880
+    val_size: 720
+    seasonal_period: 96  # (24 * 4)

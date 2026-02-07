@@ -1,7 +1,8 @@
-# Arquivo .gitignore para o projeto de Forecasting
+# Arquivo .gitignore para o projeto de Time Series Forecasting
 
 # Ignorar o ambiente virtual Python
 .venv/
+.env
 
 # Ignorar caches e arquivos compilados do Python
 __pycache__/
@@ -18,9 +19,6 @@ __pycache__/
 .DS_Store
 Thumbs.db
 
-# --- Arquivos específicos do nosso projeto ---
-
-# Ignorar todos os dados brutos e processados
 # Geralmente não versionamos dados, apenas o código que os processa
 data/
 
@@ -28,9 +26,3 @@ data/
 # (modelos, previsões, métricas e relatórios)
 lightning_logs/
 results/
-saved_models/
-reports/
-data/
-
-# Ignorar arquivos de ambiente que podem conter segredos
-.env

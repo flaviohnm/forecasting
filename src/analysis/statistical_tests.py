@@ -1,137 +1,126 @@
-# File: src/analysis/statistical_tests.py
-
+import numpy as np
+import pandas as pd
+from scipy import stats
 import os
-import matplotlib
-# Garante backend não interativo para plotagem
-matplotlib.use('Agg')
-import matplotlib.pyplot as plt
-from statsmodels.graphics.tsaplots import plot_acf, plot_pacf
-from statsmodels.tsa.stattools import kpss
 import logging
-import numpy as np  # Importado para o cálculo de lags
 
-from src.data_management import preprocessing
-
-
-def run_tests(main_config: dict, datasets_to_run: list):
+def dm_test(actual, pred1, pred2, h=1, criterion="MAE", poly_degree=2):
     """
-    Executa os testes estatísticos (KPSS, ACF, PACF) para os datasets especificados.
+    Teste de Diebold-Mariano (1995).
+    H0: A precisão preditiva dos dois modelos é igual.
+    H1: A precisão é diferente.
+    
+    Retorna: DM statistic, p-value
     """
-    print("Iniciando a execução dos testes estatísticos...")
+    e1 = np.array(actual) - np.array(pred1)
+    e2 = np.array(actual) - np.array(pred2)
+    
+    T = len(e1)
+    
+    # Define a função de perda (Loss Function)
+    if criterion == "MSE":
+        d = (e1)**2 - (e2)**2
+    elif criterion == "MAE":
+        d = np.abs(e1) - np.abs(e2)
+    elif criterion == "MAPE":
+        d = (np.abs(e1)/np.abs(actual)) - (np.abs(e2)/np.abs(actual))
+        
+    # Média e variância da diferença de perda
+    d_mean = np.mean(d)
+    
+    # Autocovariância para correção de correlação serial (Kernel HAC)
+    gamma0 = np.var(d)
+    sum_gamma = 0
+    
+    # Para horizontes h > 1, usamos um estimador de kernel para a variância
+    for lag in range(1, h):
+        gamma_lag = np.cov(d[lag:], d[:-lag])[0, 1]
+        sum_gamma += gamma_lag
+        
+    var_d = (gamma0 + 2 * sum_gamma) / T
+    
+    # Estatística DM
+    if var_d > 0:
+        dm_stat = d_mean / np.sqrt(var_d)
+    else:
+        dm_stat = 0
+        
+    # P-value (Bilateral)
+    p_value = 2 * (1 - stats.norm.cdf(np.abs(dm_stat)))
+    
+    return dm_stat, p_value
 
-    # Cria a pasta para salvar os resultados dos testes
-    results_path = os.path.join("results", "statistical_tests")
-    os.makedirs(results_path, exist_ok=True)
+def run_significance_analysis(main_config, successful_runs):
+    """
+    Compara todos os modelos Híbridos contra suas Bases.
+    """
+    logging.info("--- [STATS] Iniciando Teste de Diebold-Mariano ---")
+    
+    forecasts_path = main_config['results_paths']['forecasts']
+    comparison_path = main_config['results_paths']['comparison']
+    os.makedirs(comparison_path, exist_ok=True)
+    
+    results = []
 
-    if not datasets_to_run:
-        print("Nenhum dataset válido para processar.")
-        return
+    # Identifica pares para comparação
+    # Lógica: Se tem "hybrid_X_on_Y", comparamos com "standalone_Y"
+    for run in successful_runs:
+        if "_on_" in run:
+            parts = run.split('_on_')
+            # Ex: ETTh1_hybrid_nhits_on_base_arima_h720
+            # Precisamos extrair o nome da base e o horizonte
+            
+            # Recupera horizonte do final da string
+            horizon_str = run.split('_h')[-1]
+            h = int(horizon_str)
+            
+            # Recupera dataset
+            dataset = run.split('_')[0]
+            
+            # Recupera nome da base (ex: standalone_arima)
+            # O nome da execução híbrida é: {dataset}_{hybrid_model}_on_{base_model}_h{h}
+            # O nome da execução base é:    {dataset}_standalone_{base_model}_h{h}
+            
+            # Hack de string para pegar o nome da base corretamente
+            # Remove o dataset e o horizonte
+            middle = run.replace(f"{dataset}_", "").replace(f"_h{h}", "")
+            hybrid_model, base_model_name = middle.split('_on_')
+            
+            # Reconstrói o nome do arquivo da base
+            base_run = f"{dataset}_{base_model_name}_h{h}"
+            
+            file_hybrid = os.path.join(forecasts_path, f"forecast_{run}.csv")
+            file_base = os.path.join(forecasts_path, f"forecast_{base_run}.csv")
+            
+            if os.path.exists(file_hybrid) and os.path.exists(file_base):
+                df_h = pd.read_csv(file_hybrid)
+                df_b = pd.read_csv(file_base)
+                
+                # Garante alinhamento
+                merged = pd.merge(df_h, df_b, on=['unique_id', 'ds', 'y'], suffixes=('_hybrid', '_base'))
+                
+                if len(merged) > 0:
+                    dm, p_val = dm_test(merged['y'], merged['y_hat_base'], merged['y_hat_hybrid'], h=h)
+                    
+                    is_significant = p_val < 0.05
+                    improvement = (np.mean(np.abs(merged['y'] - merged['y_hat_base'])) - np.mean(np.abs(merged['y'] - merged['y_hat_hybrid']))) > 0
+                    
+                    results.append({
+                        'Dataset': dataset,
+                        'Horizon': h,
+                        'Hybrid_Model': hybrid_model,
+                        'Base_Model': base_model_name,
+                        'DM_Statistic': round(dm, 4),
+                        'P_Value': round(p_val, 6),
+                        'Significant_0.05': is_significant,
+                        'Hybrid_Wins': is_significant and improvement
+                    })
+                    logging.info(f"DM Test {run} vs {base_run}: p={p_val:.4f} | Sig={is_significant}")
 
-    # Garante que datasets_to_run seja uma lista de dicionários
-    if not isinstance(datasets_to_run, list) or (
-            datasets_to_run and not isinstance(datasets_to_run[0], dict)):
-        logging.error(
-            "Formato inesperado para 'datasets_to_run'. Esperava uma lista de dicionários."
-        )
-        # Tenta extrair os valores do dicionário se foi passado errado
-        if isinstance(datasets_to_run, dict):
-            datasets_to_run = list(datasets_to_run.values())
-        else:
-            return  # Não pode prosseguir
-
-    for dataset_conf in datasets_to_run:
-        dataset_name = dataset_conf['name']
-        print("\n" + "=" * 50)
-        print(f"Analisando o dataset: {dataset_name}")
-        print("=" * 50)
-
-        try:
-            # Carrega apenas os dados de treino para a análise
-            train_series, _ = preprocessing.load_and_prepare_data(
-                main_config, dataset_conf)
-
-            if train_series.empty or len(
-                    train_series) < 10:  # Pula se a série for muito curta
-                logging.warning(
-                    f"Série de treino para '{dataset_name}' está vazia ou é muito curta (<10 pontos). Pulando testes."
-                )
-                continue
-
-            # --- 1. Teste KPSS (Kwiatkowski-Phillips-Schmidt-Shin) ---
-            print("\n--- Teste de Estacionariedade (KPSS) ---")
-            # Adiciona try-except para o KPSS que pode falhar com 'auto' lags em séries curtas
-            try:
-                kpss_stat, p_value, lags, crit = kpss(train_series,
-                                                      regression='c',
-                                                      nlags="auto")
-
-                print(f'  Estatística do teste KPSS: {kpss_stat:.4f}')
-                print(f'  P-valor: {p_value:.4f}')
-                print('  Valores Críticos:')
-                for key, value in crit.items():
-                    print(f'    {key}: {value}')
-
-                if p_value < 0.05:
-                    print(
-                        "  Resultado: A hipótese nula é rejeitada (p < 0.05). A série provavelmente NÃO é estacionária."
-                    )
-                else:
-                    print(
-                        "  Resultado: Falha ao rejeitar a hipótese nula (p >= 0.05). A série provavelmente é estacionária."
-                    )
-            except Exception as e_kpss:
-                logging.warning(
-                    f"Falha ao executar o teste KPSS para '{dataset_name}': {e}"
-                )
-
-            # --- 2. Gráficos ACF e PACF ---
-            print("\n--- Gerando gráficos ACF e PACF ---")
-
-            # --- CORREÇÃO APLICADA AQUI ---
-            n_obs = len(train_series)
-            # Calcula o máximo de lags permitido (n/2 - 1)
-            # O -2 é para segurança, garantindo que seja < n/2
-            max_dynamic_lags = (n_obs // 2) - 2
-
-            # Usa 40 lags OU o máximo permitido, o que for MENOR
-            # Garante que lags seja pelo menos 1, caso n_obs seja muito pequeno
-            lags_to_use = max(1, min(40, max_dynamic_lags))
-
-            print(
-                f"  (Info: Usando {lags_to_use} lags para ACF/PACF baseado no tamanho da amostra de {n_obs})"
-            )
-
-            fig, axes = plt.subplots(2, 1, figsize=(12, 8))
-
-            # Gráfico ACF (usando lags dinâmico)
-            plot_acf(train_series, ax=axes[0], lags=lags_to_use)
-            axes[0].set_title(
-                f'Função de Autocorrelação (ACF) - {dataset_name}')
-
-            # Gráfico PACF (usando lags dinâmico)
-            plot_pacf(train_series, ax=axes[1], lags=lags_to_use)
-            axes[1].set_title(
-                f'Função de Autocorrelação Parcial (PACF) - {dataset_name}')
-
-            plt.tight_layout()
-
-            # Salva o gráfico
-            plot_filename = f"acf_pacf_{dataset_name}.png"
-            plot_filepath = os.path.join(results_path, plot_filename)
-            plt.savefig(plot_filepath)
-            print(f"Gráficos salvos em: {plot_filepath}")
-            plt.close(fig)  # Fecha a figura específica
-
-        except FileNotFoundError:
-            logging.error(
-                f"Arquivo de dados não encontrado para '{dataset_name}'. Pulando testes."
-            )
-        except Exception as e:
-            import traceback
-            logging.error(
-                f"Erro ao processar testes para '{dataset_name}': {e}\n{traceback.format_exc()}"
-            )
-            if 'fig' in locals():
-                plt.close(fig)  # Garante fechar a figura em caso de erro
-
-    print("\nAnálise estatística concluída.")
+    if results:
+        df_res = pd.DataFrame(results)
+        output_file = os.path.join(comparison_path, "diebold_mariano_results.csv")
+        df_res.to_csv(output_file, index=False)
+        logging.info(f"Resultados estatísticos salvos em {output_file}")
+    else:
+        logging.warning("Nenhum par Híbrido-Base encontrado para comparação estatística.")

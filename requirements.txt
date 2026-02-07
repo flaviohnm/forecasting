@@ -1,29 +1,36 @@
-# Data & Math
+# --- Data Manipulation & Math (Core do Data Loader) ---
 numpy==1.26.4
 pandas==2.2.2
 scipy==1.13.1
-scikit-posthocs
-pingouin
+joblib==1.4.2           # Para salvar/carregar modelos (.joblib)
+PyYAML==6.0.1           # Para ler config/main_config.yaml
 
-# Statistical Models
-statsmodels==0.14.2
-pmdarima==2.0.4
+# --- Statistical Analysis (Diebold-Mariano & Tests) ---
+scikit-posthocs         # Útil se expandirmos para testes Friedman/Nemenyi
+pingouin                # Ótima para testes estatísticos adicionais
+scikit-learn==1.5.0     # Métricas e utilitários gerais
 
-# Deep Learning - Keras Backend
-tensorflow==2.16.1
+# --- Statistical Models (Fase 1 - Bases Lineares) ---
+statsmodels==0.14.2     # CRÍTICO: Responsável pelo ACF/PACF
+pmdarima==2.0.4         # (Opcional, pois estamos usando StatsForecast, mas bom manter)
+statsforecast==1.7.5    # MOTOR PRINCIPAL dos modelos estatísticos (ARIMA/ETS)
 
-# Deep Learning - PyTorch Backend (NeuralForecast)
-torch==2.3.1
-neuralforecast==1.7.2
-statsforecast==1.7.5
-numba==0.59.1
+# --- Deep Learning Backend (Fase 2 - Resíduos Não-Lineares) ---
+torch==2.3.1            # Backend do NeuralForecast
 pytorch-lightning==2.3.0
-optuna
+neuralforecast==1.7.2   # MOTOR PRINCIPAL dos modelos N-HiTS e N-BEATS
 
-# Utilities
-scikit-learn==1.5.0
-PyYAML==6.0.1
-joblib==1.4.2
-matplotlib==3.9.0
-tabulate==0.9.0
-requests==2.31.0
+# --- Legacy / Outros Backends ---
+tensorflow==2.16.1      # (Mantido da sua base, caso tenha modelos Keras antigos)
+numba==0.59.1           # Acelerador para StatsForecast (Compatível com numpy < 1.27)
+
+# --- Optimization ---
+optuna                  # Para busca de hiperparâmetros (HPO) futura
+
+# --- Visualization & Reporting (Reporter Module) ---
+matplotlib==3.9.0       # Geração dos gráficos PNG
+seaborn==0.13.2         # NOVO: Melhora a estética dos gráficos estatísticos
+tabulate==0.9.0         # Para tabelas no terminal
+
+# --- Utilities ---
+tqdm==4.66.4            # NOVO: Barras de progresso universais
