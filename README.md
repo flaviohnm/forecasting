@@ -1,159 +1,84 @@
-# Framework de Experimentação para Previsão de Séries Temporais
+# Pipeline de Forecasting Híbrido: Estratégia HyS-MF
 
-Este repositório contém o código-fonte de um framework de experimentação desenvolvido como parte de um projeto de mestrado. O objetivo principal é avaliar e comparar o desempenho de diferentes modelos de previsão de séries temporais, incluindo abordagens estatísticas clássicas, modelos de Deep Learning e sistemas híbridos.
+Este projeto implementa uma infraestrutura experimental para séries temporais de longo prazo, utilizando a metodologia **HyS-MF** (Hybrid Strategy - Model Fusion). A arquitetura foca na decomposição de tendência linear (via modelos estatísticos) combinada com a modelagem de resíduos não-lineares via modelos de Deep Learning SOTA.
 
-A metodologia de hibridização é inspirada no trabalho de Duarte, Firmino, & de Mattos Neto (2024), que propõe um sistema híbrido combinando um modelo linear recursivo com um modelo não-linear de previsão direta para os resíduos.
+## 1. Objetivo do Experimento
 
-**Artigo de Referência:**
-> Duarte, F. C. L., Firmino, P. R. A., & de Mattos Neto, P. S. G. (2024). *A hybrid recursive direct system for multi-step mortality rate forecasting*. The Journal of Supercomputing, 80, 18430-18463.
+O objetivo central é realizar um benchmarking rigoroso entre modelos puramente estatísticos (ARIMA, ETS), modelos globais de Deep Learning (NBEATS, NHITS, iTransformer, Informer) e a abordagem híbrida proposta. O foco principal é a performance em horizontes de previsão que variam entre **24 e 720 passos** utilizando o dataset **ETTh1**.
 
----
+## 2. Arquitetura do Projeto
 
-## Metodologias Implementadas
+A organização do projeto garante a rastreabilidade total dos artefatos gerados e o isolamento de responsabilidades:
 
-O framework foi projetado para ser flexível, permitindo a fácil comparação entre diferentes estratégias de previsão multi-step:
-
-### 1. Modelos Puros (Standalone)
-Modelos estatísticos e de Deep Learning aplicados diretamente na série temporal.
-- **`ARIMA`**: Modelo Auto-Regressivo Integrado de Médias Móveis, com seleção automática de ordens via `auto_arima`.
-- **`ETS`**: Modelo de Suavização Exponencial (Error, Trend, Seasonality).
-- **`LSTM`**: Redes de Memória de Curto e Longo Prazo, usando uma abordagem *Direta* (um modelo treinado para cada passo do horizonte).
-- **`N-HiTS` / `iTransformer`**: Modelos de Deep Learning baseados em Transformers, que preveem todo o horizonte de uma vez (abordagem *MIMO*).
-
-### 2. Híbrido ARIMA + Deep Learning (MIMO)
-Uma abordagem de hibridização onde:
-1.  Um modelo `ARIMA` é treinado na série original.
-2.  Um único modelo de Deep Learning (`NBEATS`, `NHiTS`) é treinado para prever **todo o horizonte dos resíduos** de uma só vez (Multi-Input Multi-Output).
-3.  A previsão final é a soma das previsões do ARIMA e do modelo de resíduos.
-
-### 3. Híbrido ARIMA + Deep Learning (Direto - HyS-MF)
-Implementação da metodologia do artigo de referência, **Hybrid System for Mortality Forecasting (HyS-MF)**:
-1.  Um modelo `ARIMA` é treinado e faz previsões de forma **recursiva**.
-2.  **H modelos** de Deep Learning (`NBEATS`, `NHiTS`) são treinados, onde cada modelo é um especialista em prever o resíduo de um passo específico do horizonte `h` (abordagem **Direta**).
-3.  A previsão final para cada passo `h` é a soma da previsão recursiva do ARIMA e da previsão direta do `h`-ésimo modelo de resíduos.
-
----
-
-## Estrutura do Projeto
-
-O repositório está organizado da seguinte forma para garantir modularidade e reprodutibilidade:
-
-```
-.
-├── configs/
-│   ├── main_config.yaml      # Configurações principais (caminhos, datasets)
-│   └── model_params.yaml     # Configurações dos modelos e estratégias
-│
-├── data/
-│   ├── raw/                  # Datasets originais baixados
-│   └── processed/            # Dados processados (se necessário)
-│
-├── reports/
-│   └── relatorio_....md        # Relatório final em Markdown gerado pelo pipeline
-│
-├── results/
-│   ├── metrics/              # Arquivos .csv com as métricas de cada execução
-│   └── plots/                # Gráficos e dados de previsão em .csv
-│
-├── saved_models/               # Modelos treinados (.joblib, .pkl, .keras)
-│
-├── scripts/
-│   ├── setup_venv.sh         # Script para configurar o ambiente do zero
-│   ├── run_experiment.sh     # Script para executar os experimentos
-│   └── clean_venv.sh         # Script para limpar o ambiente virtual
-│
-├── src/
-│   ├── __main__.py           # Ponto de entrada para execução com 'python -m src'
-│   ├── data_management/
-│   ├── models/
-│   ├── pipelines/
-│   └── analysis/
-│
-├── requirements.txt            # Dependências do projeto
-└── ...
+```text
+forecasting/
+├── data/                       # Datasets crus e processados (Ex: ETTh1.csv)
+├── config/                     # Definições de parâmetros
+│   ├── main_config.yaml        # Caminhos globais e datasets ativos
+│   └── model_params.yaml       # Hiperparâmetros e estratégias de modelos
+├── src/                        # Código-fonte (Módulos)
+│   ├── data_management/        # Carga e pré-processamento (preprocessing.py)
+│   ├── models/                 # Definições de treinamento (arima, neuralforecast)
+│   ├── pipelines/              # Orquestradores de Treino e Avaliação
+│   ├── analysis/               # Testes estatísticos (Diebold-Mariano)
+│   ├── reporting/              # Relatórios Markdown e Visualização
+│   └── utils/                  # Auxiliares de configuração e gestão
+├── results/                    # Artefatos Gerados (Saídas)
+│   ├── saved_models/           # Binários de modelos (.joblib, .pkl, pastas .nf)
+│   ├── metrics/                # CSVs com MAPE e MASE por execução
+│   ├── forecasts/              # CSVs com séries temporais (Real vs Previsão)
+│   ├── plots/                  # Gráficos de performance (PNG)
+│   ├── comparison/             # Resultados do teste Diebold-Mariano (CSV)
+│   └── reports/                # Relatório final consolidado (Markdown)
+├── main.py                     # Ponto de entrada (Orquestrador Dinâmico)
+└── README.md                   # Documentação técnica (Este arquivo)
 ```
 
----
+## 3. Padrão de Nomenclatura e Rastreabilidade
 
-## Configuração do Ambiente (Setup)
+Para evitar colisões de dados e garantir a integridade dos resultados, todos os artefatos em `results/` seguem este padrão:
 
-### Método Simplificado com Script (Recomendado)
+* **Modelos Standalone:** `{Dataset}_standalone_{ModelName}_h{Horizon}`
+    * *Exemplo:* `ETTh1_standalone_nhits_h24`
 
-Os scripts na pasta `scripts/` automatizam todo o processo.
+* **Modelos Híbridos:** `{Dataset}_{ResidualModel}_on_{BaseModel}_h{Horizon}`
+    * *Exemplo:* `ETTh1_nhits_on_arima_h24`
 
-**Nota para usuários Windows:** Recomenda-se executar os scripts `.sh` através de um terminal como o **Git Bash** (que já vem com a instalação do Git for Windows).
+## 4. Fluxo Experimental (Fases)
 
-1.  **Clone o repositório:**
-    ```bash
-    git clone [URL_DO_SEU_REPOSITORIO]
-    cd [NOME_DA_PASTA]
-    ```
+O experimento é processado em cinco fases sequenciais e interdependentes:
 
-2.  **Dê permissão de execução aos scripts (apenas para Linux/macOS):**
-    ```bash
-    chmod +x scripts/*.sh
-    ```
+1.  **Fase 1: Modelos Base:** Treinamento dos componentes lineares/estatísticos (ARIMA, ETS) para estabelecer a base de tendência.
+2.  **Fase 2: Modelos Híbridos:** Treinamento dos modelos de Deep Learning para prever exclusivamente os resíduos (erros) gerados pela Fase 1.
+3.  **Fase 3: Avaliação:** Geração de previsões fora da amostra e cálculo das métricas **MASE** e **MAPE**.
+4.  **Fase 4: Análise Estatística:** Execução do teste de **Diebold-Mariano** para validar a significância da melhoria do modelo híbrido.
+5.  **Fase 5: Reporting:** Geração automática de gráficos de performance e consolidação do `relatorio_final.md`.
 
-3.  **Execute o script de configuração:**
-    ```bash
-    ./scripts/setup_venv.sh
-    ```
-    Este script irá criar o ambiente virtual, ativá-lo e instalar todas as dependências do `requirements.txt`.
+## 5. Configuração do Ambiente e Execução
 
-<details>
-<summary><strong>Método Manual (Alternativo)</strong></summary>
+* **Hardware:** Configurado para execução exclusiva em **CPU** para evitar erros de vínculo dinâmico (DLL WinError 1114) no Windows.
+* **Check-point:** O orquestrador verifica automaticamente arquivos existentes em `results/metrics/` para pular modelos já treinados.
 
-1.  **Crie e ative um ambiente virtual:**
-    ```bash
-    python -m venv .venv
-    source .venv/bin/activate  # No Linux/macOS
-    # ou
-    .\.venv\Scripts\activate   # No Windows
-    ```
-
-2.  **Instale as dependências:**
-    ```bash
-    pip install -r requirements.txt
-    ```
-</details>
-
----
-
-## Como Utilizar o Framework
-
-A execução dos experimentos é controlada pelos arquivos de configuração e pode ser iniciada com um único script.
-
-### 1. Configure os Datasets e Modelos
-Antes de rodar, você pode ajustar os arquivos `configs/main_config.yaml` (para datasets) e `configs/model_params.yaml` (para modelos e estratégias) conforme a necessidade do seu experimento.
-
-### 2. Execute os Experimentos
-
-#### Método Simplificado com Script (Recomendado)
-O script `run_experiment.sh` ativa o ambiente virtual e inicia a execução do pipeline principal definido em `src/main.py`.
+### Comandos de Execução
 
 ```bash
-./scripts/run_experiment.sh
+# Desativa otimizações oneDNN para evitar instabilidade de DLL entre TF e Torch
+set TF_ENABLE_ONEDNN_OPTS=0
+
+# Inicia o experimento orquestrado
+python main.py
 ```
 
-#### Execução Manual (para Controle Avançado)
-Você também pode executar o pipeline manualmente, o que é útil para rodar configurações específicas sem alterar os arquivos. O ponto de entrada é o módulo `src.main`.
+## 6. Dicionário de Métricas
 
-```bash
-# Ative o ambiente virtual primeiro
-source .venv/Scripts/activate
+Utilizamos métricas que garantem a comparabilidade entre diferentes horizontes e escalas:
 
-# Exemplo: Executa a estratégia 'full_comparison' para os datasets 'airline' e 'sunspot'
-python -m src.main --datasets airline sunspot --strategy full_comparison
-```
+* **MASE (Mean Absolute Scaled Error):** Escala o erro pelo desvio absoluto médio do benchmark Naive no treino. Valores $MASE < 1.0$ indicam performance superior ao benchmark simples.
+* **MAPE (Mean Absolute Percentage Error):** Fornece a magnitude do erro em termos percentuais relativos.
 
-### 3. Analise os Resultados
-Após a execução, os resultados estarão disponíveis nas seguintes pastas:
--   `results/metrics/`: Arquivos `.csv` com o MAPE e MASE de cada execução.
--   `results/plots/`: Gráficos de previsão e arquivos `.csv` com os dados (`real` vs. `previsao`).
--   `reports/`: Um relatório completo em formato Markdown, com tabelas e gráficos consolidados, pronto para análise.
+## 7. Metodologia de Comparação Estatística
 
----
+A validação da hipótese de pesquisa é realizada através do **Teste de Diebold-Mariano (DM)**:
 
-### Scripts Utilitários
-
--   **`scripts/clean_venv.sh`**: Use este script para remover completamente a pasta `.venv` e desativar o ambiente virtual. É útil para começar uma instalação limpa do zero.
+* **Hipótese Nula ($H_0$):** Não há diferença de acurácia entre o modelo híbrido e o benchmark.
+* **Significância:** Resultados com $p < 0.05$ são considerados estatisticamente superiores.
