@@ -102,7 +102,7 @@ def main():
 
         # Se pulamos o treino, precisamos descobrir o que existe no disco
         if not successful_runs:
-            metrics_path = main_config['./results_paths']['metrics']
+            metrics_path = main_config['results_paths']['metrics']
             logging.info("Escaneando disco por resultados existentes...")
             successful_runs = scan_existing_results(metrics_path)
 

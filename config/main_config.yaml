@@ -3,7 +3,7 @@ project_name: "Time Series Forecasting Pipeline"
 
 # Mapeamento de Pastas (Rastreabilidade)
 results_paths:
-  #comparison: "results/comparison/"
+  comparison: "results/comparison/"
   diagnostics: "results/diagnostics/"
   forecasts: "results/forecasts/"
   metrics: "results/metrics/"

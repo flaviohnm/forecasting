@@ -71,6 +71,24 @@ strategies:
           max_steps: 1000
           early_stop_patience_steps: 25
 
+    - model_name: "base_nbeats"
+      model_type: Informer
+      comparison_group: deep_learning
+      # Multiplicador do input size (Transformers gostam de contexto longo)
+      input_size_multiplier: 3  
+      params:
+        max_steps: 1000
+        learning_rate: 0.0001
+        batch_size: 32
+        model_kwargs:
+          # Hiperparâmetros do Transformer
+          hidden_size: 64      # Tamanho da camada oculta (d_model)
+          conv_hidden_size: 32 # Tamanho das camadas convolucionais
+          n_head: 4            # Número de cabeças de atenção
+          encoder_layers: 2    # Camadas do encoder
+          decoder_layers: 1    # Camadas do decoder
+          dropout: 0.1
+
     # --- MODELOS HÍBRIDOS ---
     # Resíduos de ARIMA + N-HiTS
     - model_name: "hybrid_nhits_on_arima"
