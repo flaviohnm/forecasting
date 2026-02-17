@@ -74,7 +74,7 @@ def run(model_conf, dataset_conf, main_config, exec_name):
             # Passamos o df_scaled
             model_object = train_stats_model(df_scaled, model_conf, horizon, dataset_conf['freq'])
         else:
-            # Deep Learning (NHiTS, NBEATS)
+            # Deep Learning (NHITS, NBEATS)
             val_size = dataset_conf.get('val_size', horizon)
             # Passamos o df_scaled
             model_object = train_dl_model(df_scaled, model_conf, horizon, dataset_conf['freq'], val_size)

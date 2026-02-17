@@ -89,7 +89,7 @@ def main():
     if args.mode in ['all', 'train']:
         logging.info(">>> MODO: EXECUÇÃO (Treino & Avaliação) <<<")
         # Pode parametrizar isso no argparse futuramente
-        target_datasets = ['ETTh1']
+        target_datasets = ['ETTh1','ETTh2','ETTm1']
 
         successful_runs = run_custom_pipeline(main_config,
                                               model_path,
