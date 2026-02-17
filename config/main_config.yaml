@@ -3,13 +3,14 @@ project_name: "Time Series Forecasting Pipeline"
 
 # Mapeamento de Pastas (Rastreabilidade)
 results_paths:
-  #comparison: "results/comparison/"
+  comparison: "results/comparison/"
   diagnostics: "results/diagnostics/"
   forecasts: "results/forecasts/"
   metrics: "results/metrics/"
   plots: "results/plots/"
   reports: "results/reports/"
   saved_models: "results/saved_models/"
+  statistical: "results/statistical"
 
 # Configurações Globais
 random_seed: 42

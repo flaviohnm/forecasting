@@ -1,7 +1,7 @@
 import pandas as pd
 import logging
 from neuralforecast import NeuralForecast
-from neuralforecast.models import NBEATS, NHITS
+from neuralforecast.models import NBEATS, NHITS, Informer
 from neuralforecast.losses.pytorch import MAE
 
 def train_dl_model(df, model_conf, horizon, freq, val_size):
@@ -52,6 +52,17 @@ def train_dl_model(df, model_conf, horizon, freq, val_size):
             **trainer_kwargs   # <--- CORREÇÃO: Passa max_steps aqui também
         )
         models_list.append(model)
+
+# --- NOVO BLOCO: INFORMER ---
+    elif model_type == 'Informer':
+        model = Informer(
+            h=horizon,
+            input_size=input_size,
+            max_steps=params.get('max_steps', 1000),
+            learning_rate=params.get('learning_rate', 1e-4),
+            scaler_type=None, # Já estamos escalando externamente!
+            **model_kwargs
+        )
         
     else:
         raise ValueError(f"Modelo Deep Learning desconhecido: {model_type}")
