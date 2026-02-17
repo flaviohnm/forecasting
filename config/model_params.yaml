@@ -39,7 +39,7 @@ strategies:
     
     # N-HiTS Standalone
     - model_name: "base_nhits"
-      model_type: "NHiTS"
+      model_type: "NHITS"
       comparison_group: "deep_learning"
       # Multiplicador define o tamanho da janela de entrada (Lookback)
       # Ex: Horizon 720 * 3 = 2160 steps de entrada
