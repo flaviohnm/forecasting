@@ -10,6 +10,7 @@ results_paths:
   plots: "results/plots/"
   reports: "results/reports/"
   saved_models: "results/saved_models/"
+  statistical: "results/statistical"
 
 # Configurações Globais
 random_seed: 42

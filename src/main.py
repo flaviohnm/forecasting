@@ -116,12 +116,6 @@ def main():
             except Exception as e:
                 logging.error(f"Erro nos gráficos: {e}")
 
-            # Testes Estatísticos
-            try:
-                run_significance_analysis(main_config, successful_runs)
-            except Exception as e:
-                logging.error(f"Erro na estatística: {e}")
-
             # Relatório Markdown
             try:
                 reporter.generate_report(main_config, successful_runs)
