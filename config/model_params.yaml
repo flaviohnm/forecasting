@@ -71,7 +71,7 @@ strategies:
           max_steps: 1000
           early_stop_patience_steps: 25
 
-    - model_name: "base_nbeats"
+    - model_name: "base_informer"
       model_type: Informer
       comparison_group: deep_learning
       # Multiplicador do input size (Transformers gostam de contexto longo)
