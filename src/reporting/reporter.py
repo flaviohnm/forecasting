@@ -96,6 +96,7 @@ def generate_plots(main_config, successful_runs):
     forecasts_path = main_config['results_paths']['forecasts']
     plots_path = main_config['results_paths']['plots']
     os.makedirs(plots_path, exist_ok=True)
+    os.makedirs(comparison_path, exist_ok=True)
     
     # --- Parte A: Gráficos Individuais (Mantido da sua versão) ---
     count = 0

@@ -2,7 +2,7 @@
 
 strategies:
   full_comparison:
-    # --- BENCHMARKS ESTATÍSTICOS ---
+    --- BENCHMARKS ESTATÍSTICOS ---
     - model_name: "base_arima"
       model_type: "ARIMA"
       comparison_group: "statistical"
@@ -89,7 +89,7 @@ strategies:
           decoder_layers: 1    # Camadas do decoder
           dropout: 0.1
 
-    # --- MODELOS HÍBRIDOS ---
+    --- MODELOS HÍBRIDOS ---
     # Resíduos de ARIMA + N-HiTS
     - model_name: "hybrid_nhits_on_arima"
       model_type: "Hybrid_NHiTS"
