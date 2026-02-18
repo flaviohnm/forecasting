@@ -2,8 +2,27 @@ import os
 import logging
 import pandas as pd
 import joblib
-from neuralforecast import NeuralForecast # <--- Importante
+import torch  # <--- 1. Import necessário para o patch
 
+# ==============================================================================
+# 🚑 FIX DEFINITIVO PYTORCH 2.6+ (Aplicar ANTES de importar NeuralForecast)
+# ==============================================================================
+# Isso força o torch.load a aceitar arquivos antigos ou classes complexas (AttributeDict)
+try:
+    _original_torch_load = torch.load
+    def _patched_torch_load(*args, **kwargs):
+        # Força weights_only=False incondicionalmente
+        kwargs['weights_only'] = False 
+        return _original_torch_load(*args, **kwargs)
+    
+    torch.load = _patched_torch_load
+    logging.info("⚠️  Patch de Segurança aplicado em TRAIN: torch.load(weights_only=False)")
+except Exception as e:
+    logging.warning(f"Falha ao aplicar patch do PyTorch: {e}")
+# ==============================================================================
+
+# --- Imports do Projeto (Agora é seguro importar NeuralForecast) ---
+from neuralforecast import NeuralForecast 
 from src.data_management.data_loader import load_dataset
 from src.models.statistical import train_stats_model
 from src.models.deep_learning import train_dl_model
@@ -70,7 +89,7 @@ def run(model_conf, dataset_conf, main_config, exec_name):
             val_size = dataset_conf.get('val_size', horizon)
             model_object = train_dl_model(df_scaled, model_conf, horizon, dataset_conf['freq'], val_size)
             
-            # SALVAMENTO NEURAL (Nativo .save) - Resolve o erro de Pickle/GPU
+            # SALVAMENTO NEURAL (Nativo .save)
             logging.info(f"Salvando modelo neural em: {neural_path}")
             model_object.save(neural_path, overwrite=True)
             

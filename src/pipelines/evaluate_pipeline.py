@@ -3,8 +3,26 @@ import logging
 import joblib
 import pandas as pd
 import numpy as np
-from neuralforecast import NeuralForecast # <--- Importante
+import torch # <--- 1. Import necessário para o patch
 
+# ==============================================================================
+# 🚑 FIX DEFINITIVO PYTORCH 2.6+ (Aplicar ANTES de importar NeuralForecast)
+# ==============================================================================
+try:
+    _original_torch_load = torch.load
+    def _patched_torch_load(*args, **kwargs):
+        # Força weights_only=False incondicionalmente
+        kwargs['weights_only'] = False 
+        return _original_torch_load(*args, **kwargs)
+    
+    torch.load = _patched_torch_load
+    logging.info("⚠️  Patch de Segurança aplicado em EVAL: torch.load(weights_only=False)")
+except Exception as e:
+    logging.warning(f"Falha ao aplicar patch do PyTorch: {e}")
+# ==============================================================================
+
+# --- Imports do Projeto ---
+from neuralforecast import NeuralForecast 
 from src.data_management.data_loader import load_dataset
 from src.models.utils import predict_wrapper
 from src.analysis.diagnostics import save_residual_diagnostics
