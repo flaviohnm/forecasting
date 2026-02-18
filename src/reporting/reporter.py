@@ -92,6 +92,7 @@ def generate_plots(main_config, successful_runs):
     """
     logging.info("--- [PLOTS] Gerando Gráficos de Previsão ---")
     
+    comparison_path = main_config['results_paths']['comparison']
     forecasts_path = main_config['results_paths']['forecasts']
     plots_path = main_config['results_paths']['plots']
     os.makedirs(plots_path, exist_ok=True)
@@ -166,7 +167,7 @@ def generate_plots(main_config, successful_runs):
             plt.grid(True, which='both', linestyle='--', linewidth=0.5)
             plt.tight_layout()
             
-            comp_output = os.path.join(plots_path, f"comparativo_{ds_name}.png")
+            comp_output = os.path.join(comparison_path, f"comparativo_{ds_name}.png")
             plt.savefig(comp_output)
             plt.close()
             
