@@ -72,7 +72,7 @@ strategies:
           early_stop_patience_steps: 25
 
     - model_name: "base_informer"
-      model_type: Informer
+      model_type: "INFORMER"
       comparison_group: deep_learning
       # Multiplicador do input size (Transformers gostam de contexto longo)
       input_size_multiplier: 3  
@@ -92,7 +92,7 @@ strategies:
     # --- MODELOS HÍBRIDOS ---
     # Resíduos de ARIMA + N-HiTS
     - model_name: "hybrid_nhits_on_arima"
-      model_type: "Hybrid_NHiTS"
+      model_type: "Hybrid_NHITS"
       comparison_group: "hybrid_methods"
       depends_on: "base_arima"
       input_size_multiplier: 4
@@ -109,7 +109,7 @@ strategies:
 
     # Resíduos de ETS + N-HiTS
     - model_name: "hybrid_nhits_on_ets"
-      model_type: "Hybrid_NHiTS"
+      model_type: "Hybrid_NHITS"
       comparison_group: "hybrid_methods"
       depends_on: "base_ets"
       input_size_multiplier: 4
