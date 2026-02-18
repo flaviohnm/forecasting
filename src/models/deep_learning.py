@@ -42,7 +42,7 @@ def train_dl_model(df_train_scaled, model_conf, horizon, freq, val_size):
             **model_kwargs_clean # Usamos a versão limpa
         )
 
-    elif model_type == 'Informer':
+    elif model_type == 'INFORMER':
         model = Informer(
             h=horizon,
             input_size=input_size,
