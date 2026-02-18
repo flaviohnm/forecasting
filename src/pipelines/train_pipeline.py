@@ -6,7 +6,6 @@ import joblib
 from src.data_management.data_loader import load_dataset
 from src.models.statistical import train_stats_model
 from src.models.deep_learning import train_dl_model
-# --- NOVO IMPORT ---
 from src.data_management.preprocessor import TimeSeriesScaler
 
 def run(model_conf, dataset_conf, main_config, exec_name):

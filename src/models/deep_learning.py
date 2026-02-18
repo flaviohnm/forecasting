@@ -11,19 +11,15 @@ def train_dl_model(df_train_scaled, model_conf, horizon, freq, val_size):
     model_type = model_conf['model_type']
     params = model_conf.get('params', {})
     
-    # Recupera kwargs extras
     model_kwargs = params.get('model_kwargs', {})
-    
-    # Input size calculado dinamicamente no pipeline
-    # Se não houver, usa o horizonte como default
+
     input_size = model_kwargs.get('input_size', horizon)
 
-    # --- CORREÇÃO DO ERRO "MULTIPLE VALUES" ---
-    # Criamos uma cópia limpa dos argumentos para remover 'input_size'
-    # já que vamos passá-lo explicitamente logo abaixo.
     model_kwargs_clean = model_kwargs.copy()
     if 'input_size' in model_kwargs_clean:
         del model_kwargs_clean['input_size']
+
+    model_type = model_type.upper().replace("HYBRID_", "").replace("BASE_", "")
 
     logging.info(f"Inicializando {model_type} com Input={input_size}, Horizon={horizon}")
 
