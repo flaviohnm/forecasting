@@ -1,5 +1,6 @@
 import logging
 import os
+import shutil  # <--- Novo import adicionado para forçar exclusão de pastas
 
 import joblib
 import pandas as pd
@@ -14,9 +15,7 @@ try:
         return _original_torch_load(*args, **kwargs)
 
     torch.load = _patched_torch_load
-    logging.info(
-        "⚠️  Patch de Segurança aplicado em TRAIN: torch.load(weights_only=False)"
-    )
+    logging.info("⚠️  Patch de Segurança aplicado em TRAIN: torch.load(weights_only=False)")
 except Exception as e:
     logging.warning(f"Falha ao aplicar patch do PyTorch: {e}")
 # ==============================================================================
@@ -42,9 +41,7 @@ def run(model_conf, dataset_conf, main_config, exec_name):
     scaler_path = os.path.join(save_path, f"{exec_name}_scaler.joblib")
 
     # Verifica se já existe (checa arquivo OU pasta)
-    if (os.path.exists(file_path) or os.path.exists(neural_path)) and os.path.exists(
-        scaler_path
-    ):
+    if (os.path.exists(file_path) or os.path.exists(neural_path)) and os.path.exists(scaler_path):
         logging.info(f"Modelo {exec_name} já existe. Pulando treino.")
         return
 
@@ -64,9 +61,7 @@ def run(model_conf, dataset_conf, main_config, exec_name):
 
     # 4. Híbrido: Resíduos
     if model_conf.get("depends_on"):
-        base_model_name = (
-            f"{dataset_conf['name']}_{model_conf['depends_on']}_h{horizon}"
-        )
+        base_model_name = f"{dataset_conf['name']}_{model_conf['depends_on']}_h{horizon}"
         logging.info(f"Modo Híbrido. Calculando resíduos sobre: {base_model_name}")
         try:
             df_residuals = calculate_residuals(base_model_name, df, save_path, horizon)
@@ -91,9 +86,7 @@ def run(model_conf, dataset_conf, main_config, exec_name):
             "NAIVE",
             "SEASONAL_NAIVE",
         ]:
-            model_object = train_stats_model(
-                df_scaled, model_conf, horizon, dataset_conf["freq"]
-            )
+            model_object = train_stats_model(df_scaled, model_conf, horizon, dataset_conf["freq"])
 
             # SALVAMENTO ESTATÍSTICO (Joblib)
             logging.info(f"Salvando modelo estatístico em: {file_path}")
@@ -102,11 +95,14 @@ def run(model_conf, dataset_conf, main_config, exec_name):
         else:
             # Neural (NHiTS, NBEATS, Informer)
             val_size = dataset_conf.get("val_size", horizon)
-            model_object = train_dl_model(
-                df_scaled, model_conf, horizon, dataset_conf["freq"], val_size
-            )
+            model_object = train_dl_model(df_scaled, model_conf, horizon, dataset_conf["freq"], val_size)
 
             # SALVAMENTO NEURAL (Nativo .save)
+            # FIX: Força a exclusão da pasta se ela já existir e não estiver vazia
+            if os.path.exists(neural_path):
+                logging.info(f"Limpando diretório antigo: {neural_path}")
+                shutil.rmtree(neural_path)
+
             logging.info(f"Salvando modelo neural em: {neural_path}")
             model_object.save(neural_path, overwrite=True)
 
