@@ -10,16 +10,12 @@ from src.reporting import reporter
 from src.analysis.statistical_tests import run_significance_analysis
 
 # --- FILTRO DE AVISOS (Manter logs limpos) ---
-warnings.filterwarnings("ignore", category=FutureWarning,
-                        message=".*'H' is deprecated.*")
-warnings.filterwarnings("ignore", category=FutureWarning,
-                        message=".*'T' is deprecated.*")
-warnings.filterwarnings("ignore", category=FutureWarning,
-                        message=".*'S' is deprecated.*")
+warnings.filterwarnings("ignore", category=FutureWarning, message=".*'H' is deprecated.*")
+warnings.filterwarnings("ignore", category=FutureWarning, message=".*'T' is deprecated.*")
+warnings.filterwarnings("ignore", category=FutureWarning, message=".*'S' is deprecated.*")
 
 # Ignora aviso sobre construtor 'df' do StatsForecast
-warnings.filterwarnings(
-    "ignore", message=".*The `df` argument of the StatsForecast constructor.*")
+warnings.filterwarnings("ignore", message=".*The `df` argument of the StatsForecast constructor.*")
 
 # --- NOVO FILTRO: Ignora aviso sobre NIXTLA_ID_AS_COL ---
 warnings.filterwarnings("ignore", message=".*NIXTLA_ID_AS_COL.*")
@@ -27,9 +23,9 @@ warnings.filterwarnings("ignore", message=".*NIXTLA_ID_AS_COL.*")
 
 
 def setup_logging():
-    logging.basicConfig(level=logging.INFO,
-                        format='%(asctime)s - %(levelname)s - %(message)s',
-                        datefmt='%Y-%m-%d %H:%M:%S')
+    logging.basicConfig(
+        level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s", datefmt="%Y-%m-%d %H:%M:%S"
+    )
 
 
 def scan_existing_results(metrics_path):
@@ -55,21 +51,19 @@ def main():
     setup_logging()
 
     # --- 1. Configuração de Argumentos (CLI) ---
-    parser = argparse.ArgumentParser(
-        description="Time Series Forecasting Pipeline")
+    parser = argparse.ArgumentParser(description="Time Series Forecasting Pipeline")
 
     parser.add_argument(
-        '--mode',
+        "--mode",
         type=str,
-        default='all',
-        choices=['all', 'train', 'report'],
-        help="Escolha a etapa: 'train' (só treina), 'report' (só relatórios) ou 'all' (ambos)."
+        default="all",
+        choices=["all", "train", "report"],
+        help="Escolha a etapa: 'train' (só treina), 'report' (só relatórios) ou 'all' (ambos).",
     )
 
     parser.add_argument(
-        '--force',
-        action='store_true',
-        help="Se usado, força o re-treinamento mesmo se o modelo já existir.")
+        "--force", action="store_true", help="Se usado, força o re-treinamento mesmo se o modelo já existir."
+    )
 
     args = parser.parse_args()
 
@@ -86,29 +80,27 @@ def main():
     successful_runs = []
 
     # --- 3. ETAPA DE TREINAMENTO ---
-    if args.mode in ['all', 'train']:
+    if args.mode in ["all", "train"]:
         logging.info(">>> MODO: EXECUÇÃO (Treino & Avaliação) <<<")
         # Pode parametrizar isso no argparse futuramente
-        target_datasets = ['ETTh1','ETTh2','ETTm1']
+        target_datasets = ["ETTh1", "ETTh2", "ETTm1"]
 
-        successful_runs = run_custom_pipeline(main_config,
-                                              model_path,
-                                              target_datasets=target_datasets,
-                                              force_rerun=args.force)
+        successful_runs = run_custom_pipeline(
+            main_config, model_path, target_datasets=target_datasets, force_rerun=args.force
+        )
 
     # --- 4. ETAPA DE RELATÓRIOS ---
-    if args.mode in ['all', 'report']:
+    if args.mode in ["all", "report"]:
         logging.info(">>> MODO: REPORTING (Gráficos & Estatísticas) <<<")
 
         # Se pulamos o treino, precisamos descobrir o que existe no disco
         if not successful_runs:
-            metrics_path = main_config['results_paths']['metrics']
+            metrics_path = main_config["results_paths"]["metrics"]
             logging.info("Escaneando disco por resultados existentes...")
             successful_runs = scan_existing_results(metrics_path)
 
         if successful_runs:
-            logging.info(
-                f"Gerando artefatos para {len(successful_runs)} modelos.")
+            logging.info(f"Gerando artefatos para {len(successful_runs)} modelos.")
 
             # Gráficos
             try:
@@ -122,8 +114,7 @@ def main():
             except Exception as e:
                 logging.error(f"Erro no relatório: {e}")
         else:
-            logging.warning(
-                "Nenhum resultado encontrado para gerar relatórios.")
+            logging.warning("Nenhum resultado encontrado para gerar relatórios.")
 
 
 if __name__ == "__main__":
