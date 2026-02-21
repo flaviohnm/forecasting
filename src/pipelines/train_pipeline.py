@@ -1,6 +1,6 @@
 import logging
 import os
-import shutil  # <--- Novo import adicionado para forçar exclusão de pastas
+import shutil
 
 import joblib
 import pandas as pd
