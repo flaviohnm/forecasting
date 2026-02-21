@@ -74,12 +74,11 @@ strategies:
     - model_name: "base_informer"
       model_type: "INFORMER"
       comparison_group: deep_learning
-      # Multiplicador do input size (Transformers gostam de contexto longo)
-      input_size_multiplier: 3  
+      input_size_multiplier: 2  
       params:
         max_steps: 1000
         learning_rate: 0.0001
-        batch_size: 32
+        batch_size: 8
         model_kwargs:
           # Hiperparâmetros do Transformer
           hidden_size: 64      # Tamanho da camada oculta (d_model)
