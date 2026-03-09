@@ -1,28 +1,44 @@
-# Arquivo .gitignore para o projeto de Time Series Forecasting
-
-# Ignorar o ambiente virtual Python
+# === Ambiente Python (Linux/pyenv) ===
 .venv/
-.env
+env/
+venv/
+ENV/
 
-# Ignorar caches e arquivos compilados do Python
+.venv
+
+# === Caches e Compilados ===
 __pycache__/
-*.pyc
-*.pyo
-*.pyd
+*.py[cod]
+*$py.class
+.pytest_cache/
+.mypy_cache/
+.ipynb_checkpoints/
 
-# Ignorar pastas de IDEs e editores de código
+# === Dados e Modelos (MLOps) ===
+# Ignorar a pasta de dados brutos e processados
+data/
+# Ignorar arquivos de modelos pesados (.pkl, .h5, .pt, .onnx)
+*.pkl
+*.h5
+*.pt
+*.pth
+*.onnx
+# Logs do PyTorch Lightning e TensorBoard
+lightning_logs/
+results/
+outputs/
+
+# === IDEs e Sistema (Ubuntu/Linux) ===
 .vscode/
 .idea/
 *.swp
-
-# Ignorar arquivos de sistema operacional (macOS, Windows)
+*~
+# Arquivos específicos do Linux
+.directory
+.Trash-*
 .DS_Store
 Thumbs.db
 
-# Geralmente não versionamos dados, apenas o código que os processa
-data/
-
-# Ignorar todos os resultados gerados pela pipeline
-# (modelos, previsões, métricas e relatórios)
-lightning_logs/
-results/
+# === Jupyter Notebooks ===
+# Às vezes é bom ignorar os arquivos temporários de salvamento automático
+.ipynb_checkpoints
