@@ -1,4 +1,5 @@
 import logging
+
 import pandas as pd
 from statsforecast import StatsForecast
 from statsforecast.models import AutoARIMA, AutoETS, Naive, SeasonalNaive

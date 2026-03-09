@@ -23,7 +23,7 @@ datasets:
     target_column: "OT"
     date_column: "date"
     freq: "h"
-    forecast_horizon: [96, 192, 336, 720]
+    forecast_horizon: [ 96, 192, 336, 720 ]
     test_size: 2880
     val_size: 720
     seasonal_period: 24
@@ -34,7 +34,7 @@ datasets:
     target_column: "OT"
     date_column: "date"
     freq: "h"
-    forecast_horizon: [96, 192, 336, 720]
+    forecast_horizon: [ 96, 192, 336, 720 ]
     test_size: 2880
     val_size: 720
     seasonal_period: 24
@@ -44,8 +44,8 @@ datasets:
     download_url: "https://raw.githubusercontent.com/zhouhaoyi/ETDataset/main/ETT-small/ETTm1.csv"
     target_column: "OT"
     date_column: "date"
-    freq: "t"  # 15 minutos
-    forecast_horizon: [96, 192, 336, 720]
+    freq: "t" # 15 minutos
+    forecast_horizon: [ 96, 192, 336, 720 ]
     test_size: 2880
     val_size: 720
-    seasonal_period: 96  # (24 * 4)
+    seasonal_period: 96 # (24 * 4)

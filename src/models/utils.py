@@ -9,7 +9,6 @@ def get_fitted_values(model, df_train, horizon=1):
     # 1. StatsForecast (ARIMA, ETS, NAIVE, etc.)
     if "StatsForecast" in str(type(model)):
         try:
-
             _ = model.forecast(h=horizon, fitted=True)
 
             # Agora sim podemos recuperar os valores ajustados com segurança
@@ -20,9 +19,7 @@ def get_fitted_values(model, df_train, horizon=1):
                 fitted = fitted.reset_index()
 
             # Identifica a coluna de predição (ex: 'AutoARIMA', 'AutoETS')
-            model_col = [
-                c for c in fitted.columns if c not in ["ds", "unique_id", "y"]
-            ][0]
+            model_col = [c for c in fitted.columns if c not in ["ds", "unique_id", "y"]][0]
             fitted = fitted.rename(columns={model_col: "y_hat"})
 
             return fitted[["unique_id", "ds", "y", "y_hat"]]
@@ -44,9 +41,7 @@ def get_fitted_values(model, df_train, horizon=1):
 
     else:
         # Tenta fallback genérico se não for nenhum dos tipos conhecidos
-        raise ValueError(
-            f"Modelo {type(model)} não suporta recuperação de fitted values (in-sample)."
-        )
+        raise ValueError(f"Modelo {type(model)} não suporta recuperação de fitted values (in-sample).")
 
 
 def predict_wrapper(model, horizon, df_history=None):
