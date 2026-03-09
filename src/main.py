@@ -1,13 +1,12 @@
-import logging
 import argparse
-import os
 import glob
+import logging
+import os
 import warnings
 
+from src.reporting import reporter
 from src.utils.config_loader import load_config
 from src.utils.experiment_manager import run_custom_pipeline
-from src.reporting import reporter
-from src.analysis.statistical_tests import run_significance_analysis
 
 # --- FILTRO DE AVISOS (Manter logs limpos) ---
 warnings.filterwarnings("ignore", category=FutureWarning, message=".*'H' is deprecated.*")
@@ -83,7 +82,7 @@ def main():
     if args.mode in ["all", "train"]:
         logging.info(">>> MODO: EXECUÇÃO (Treino & Avaliação) <<<")
         # Pode parametrizar isso no argparse futuramente
-        target_datasets = ["ETTh1", "ETTh2", "ETTm1"]
+        target_datasets = ["ETTh1"]
 
         successful_runs = run_custom_pipeline(
             main_config, model_path, target_datasets=target_datasets, force_rerun=args.force

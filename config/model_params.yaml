@@ -2,153 +2,162 @@
 
 strategies:
   full_comparison:
-    # --- BENCHMARKS ESTATÍSTICOS ---
-    - model_name: "base_arima"
-      model_type: "ARIMA"
-      comparison_group: "statistical"
-      params:
-        seasonal: true
-        m: 24 # Será ajustado pelo script se a frequencia mudar
-        start_p: 1
-        start_q: 1
-        max_p: 5
-        max_q: 5
-        d: null # Deixe null para auto_arima decidir
-        D: null
-        trace: false
+  # --- BENCHMARKS ESTATÍSTICOS ---
+  - model_name: "base_arima"
+    model_type: "ARIMA"
+    comparison_group: "statistical"
+    params:
+      seasonal: true
+      m: 24 # Será ajustado pelo script se a frequencia mudar
+      start_p: 1
+      start_q: 1
+      max_p: 5
+      max_q: 5
+      d: null # Deixe null para auto_arima decidir
+      D: null
+      trace: false
 
-    - model_name: "base_ets"
-      model_type: "ETS"
-      comparison_group: "statistical"
-      params:
-        trend: "add"
-        seasonal: "add"
-        damped_trend: true
+  - model_name: "base_ets"
+    model_type: "ETS"
+    comparison_group: "statistical"
+    params:
+      trend: "add"
+      seasonal: "add"
+      damped_trend: true
 
-    - model_name: "base_naive"
-      model_type: "NAIVE"
-      comparison_group: "statistical"
-      params: {}
+  - model_name: "base_naive"
+    model_type: "NAIVE"
+    comparison_group: "statistical"
+    params: {}
 
-    - model_name: "base_seasonal_naive"
-      model_type: "SEASONAL_NAIVE"
-      comparison_group: "statistical"
-      params: {}
+  - model_name: "base_seasonal_naive"
+    model_type: "SEASONAL_NAIVE"
+    comparison_group: "statistical"
+    params: {}
 
-    # --- MODELOS STANDALONE DEEP LEARNING (NeuralForecast) ---
-    
-    # N-HiTS Standalone
-    - model_name: "base_nhits"
-      model_type: "NHITS"
-      comparison_group: "deep_learning"
-      # Multiplicador define o tamanho da janela de entrada (Lookback)
-      # Ex: Horizon 720 * 3 = 2160 steps de entrada
-      input_size_multiplier: 4  
-      params:
-        model_kwargs:
-          stack_types: ['identity', 'identity']
-          n_blocks: [1, 1]
-          mlp_units: [[256, 256], [256, 256]] # Aumentado para lidar com Long-Term
-          n_pool_kernel_size: [2, 1]
-          random_seed: 42
-        trainer_kwargs:
-          max_steps: 1000
-          early_stop_patience_steps: 25
+  # --- MODELOS STANDALONE DEEP LEARNING (NeuralForecast) ---
 
-    # N-BEATS Standalone
-    - model_name: "base_nbeats"
-      model_type: "NBEATS"
-      comparison_group: "deep_learning"
-      input_size_multiplier: 4
-      params:
-        model_kwargs:
-          stack_types: ["trend", "seasonality"]
-          n_blocks: [1, 1]
-          n_polynomials: 2
-          n_harmonics: 1
-          random_seed: 42
-        trainer_kwargs:
-          max_steps: 1000
-          early_stop_patience_steps: 25
-
-    - model_name: "base_informer"
-      model_type: "INFORMER"
-      comparison_group: deep_learning
-      input_size_multiplier: 2  
-      params:
+  # N-HiTS Standalone
+  - model_name: "base_nhits"
+    model_type: "NHITS"
+    comparison_group: "deep_learning"
+    # Multiplicador define o tamanho da janela de entrada (Lookback)
+    # Ex: Horizon 720 * 3 = 2160 steps de entrada
+    input_size_multiplier: 4
+    params:
+      model_kwargs:
+        stack_types: [ 'identity', 'identity' ]
+        n_blocks: [ 1, 1 ]
+        mlp_units: [ [ 256, 256 ], [ 256, 256 ] ] # Aumentado para lidar com Long-Term
+        n_pool_kernel_size: [ 2, 1 ]
+        random_seed: 42
+      trainer_kwargs:
         max_steps: 1000
-        learning_rate: 0.0001
-        batch_size: 8
-        model_kwargs:
-          # Hiperparâmetros do Transformer
-          hidden_size: 64      # Tamanho da camada oculta (d_model)
-          conv_hidden_size: 32 # Tamanho das camadas convolucionais
-          n_head: 4            # Número de cabeças de atenção
-          encoder_layers: 2    # Camadas do encoder
-          decoder_layers: 1    # Camadas do decoder
-          dropout: 0.1
+        early_stop_patience_steps: 25
 
-    # --- MODELOS HÍBRIDOS ---
-    # Resíduos de ARIMA + N-HiTS
-    - model_name: "hybrid_nhits_on_arima"
-      model_type: "Hybrid_NHITS"
-      comparison_group: "hybrid_methods"
-      depends_on: "base_arima"
-      input_size_multiplier: 4
-      params:
-        model_kwargs:
-          stack_types: ['identity', 'identity']
-          n_blocks: [1, 1]
-          mlp_units: [[256, 256], [256, 256]]
-          random_seed: 42
-          learning_rate: 0.001
-        trainer_kwargs:
-          max_steps: 1000
-          early_stop_patience_steps: 25
+  # N-BEATS Standalone
+  - model_name: "base_nbeats"
+    model_type: "NBEATS"
+    comparison_group: "deep_learning"
+    input_size_multiplier: 4
+    params:
+      model_kwargs:
+        stack_types: [ "trend", "seasonality" ]
+        n_blocks: [ 1, 1 ]
+        n_polynomials: 2
+        n_harmonics: 1
+        random_seed: 42
+      trainer_kwargs:
+        max_steps: 1000
+        early_stop_patience_steps: 25
 
-    # Resíduos de ETS + N-HiTS
-    - model_name: "hybrid_nhits_on_ets"
-      model_type: "Hybrid_NHITS"
-      comparison_group: "hybrid_methods"
-      depends_on: "base_ets"
-      input_size_multiplier: 4
-      params:
-        model_kwargs:
-          stack_types: ['identity', 'identity']
-          n_blocks: [1, 1]
-          mlp_units: [[256, 256], [256, 256]]
-          random_seed: 42
-          learning_rate: 0.001
-        trainer_kwargs:
-          max_steps: 1000
-          early_stop_patience_steps: 25
+  # Informer Standalone
+  # - model_name: "base_informer"
+  #   model_type: "INFORMER"
+  #   comparison_group: deep_learning
+  #   input_size_multiplier: 2
+  #   params:
+  #     max_steps: 1000
+  #     learning_rate: 0.0001
+  #     batch_size: 8
+  #     model_kwargs:
+  #       # Hiperparâmetros do Transformer
+  #       hidden_size: 64 # Tamanho da camada oculta (d_model)
+  #       conv_hidden_size: 32 # Tamanho das camadas convolucionais
+  #       n_head: 4 # Número de cabeças de atenção
+  #       encoder_layers: 2 # Camadas do encoder
+  #       decoder_layers: 1 # Camadas do decoder
+  #       dropout: 0.1
 
-    # Resíduos de ARIMA + N-BEATS
-    - model_name: "hybrid_nbeats_on_arima"
-      model_type: "Hybrid_NBEATS"
-      comparison_group: "hybrid_methods"
-      depends_on: "base_arima"
-      input_size_multiplier: 4
-      params:
-        model_kwargs:
-          stack_types: ["identity", "identity"]
-          n_blocks: [1, 1]
-          random_seed: 42
-        trainer_kwargs:
-          max_steps: 1000
-          early_stop_patience_steps: 25
+  # --- MODELOS HÍBRIDOS ---
+  # Resíduos de ARIMA + N-HiTS
+  - model_name: "hybrid_nhits_on_arima"
+    model_type: "Hybrid_NHITS"
+    comparison_group: "hybrid_methods"
+    depends_on: "base_arima"
+    input_size_multiplier: 4
+    use_vmd: True      # <--- ATIVA O VMD PARA OS RESÍDUOS!
+    vmd_modes: 4       # <--- (Opcional) Número de modos extraído
+    params:
+      model_kwargs:
+        stack_types: [ 'identity', 'identity' ]
+        n_blocks: [ 1, 1 ]
+        mlp_units: [ [ 256, 256 ], [ 256, 256 ] ]
+        random_seed: 42
+        learning_rate: 0.001
+      trainer_kwargs:
+        max_steps: 1000
+        early_stop_patience_steps: 25
 
-    # Resíduos de ETS + N-BEATS
-    - model_name: "hybrid_nbeats_on_ets"
-      model_type: "Hybrid_NBEATS"
-      comparison_group: "hybrid_methods"
-      depends_on: "base_ets"
-      input_size_multiplier: 4
-      params:
-        model_kwargs:
-          stack_types: ["identity", "identity"]
-          n_blocks: [1, 1]
-          random_seed: 42
-        trainer_kwargs:
-          max_steps: 1000
-          early_stop_patience_steps: 25
+  # Resíduos de ETS + N-HiTS
+  - model_name: "hybrid_nhits_on_ets"
+    model_type: "Hybrid_NHITS"
+    comparison_group: "hybrid_methods"
+    depends_on: "base_ets"
+    input_size_multiplier: 4
+    use_vmd: True      # <--- ATIVA O VMD PARA OS RESÍDUOS!
+    vmd_modes: 4       # <--- (Opcional) Número de modos extraído
+    params:
+      model_kwargs:
+        stack_types: [ 'identity', 'identity' ]
+        n_blocks: [ 1, 1 ]
+        mlp_units: [ [ 256, 256 ], [ 256, 256 ] ]
+        random_seed: 42
+        learning_rate: 0.001
+      trainer_kwargs:
+        max_steps: 1000
+        early_stop_patience_steps: 25
+
+  # Resíduos de ARIMA + N-BEATS
+  - model_name: "hybrid_nbeats_on_arima"
+    model_type: "Hybrid_NBEATS"
+    comparison_group: "hybrid_methods"
+    depends_on: "base_arima"
+    input_size_multiplier: 4
+    use_vmd: True      # <--- ATIVA O VMD PARA OS RESÍDUOS!
+    vmd_modes: 4       # <--- (Opcional) Número de modos extraído    
+    params:
+      model_kwargs:
+        stack_types: [ "identity", "identity" ]
+        n_blocks: [ 1, 1 ]
+        random_seed: 42
+      trainer_kwargs:
+        max_steps: 1000
+        early_stop_patience_steps: 25
+
+  # Resíduos de ETS + N-BEATS
+  - model_name: "hybrid_nbeats_on_ets"
+    model_type: "Hybrid_NBEATS"
+    comparison_group: "hybrid_methods"
+    depends_on: "base_ets"
+    input_size_multiplier: 4
+    use_vmd: True      # <--- ATIVA O VMD PARA OS RESÍDUOS!
+    vmd_modes: 4       # <--- (Opcional) Número de modos extraído    
+    params:
+      model_kwargs:
+        stack_types: [ "identity", "identity" ]
+        n_blocks: [ 1, 1 ]
+        random_seed: 42
+      trainer_kwargs:
+        max_steps: 1000
+        early_stop_patience_steps: 25

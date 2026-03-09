@@ -1,8 +1,7 @@
-import pandas as pd
 import logging
+
 from neuralforecast import NeuralForecast
 from neuralforecast.models import NBEATS, NHITS, Informer
-from neuralforecast.losses.pytorch import MAE
 
 
 def train_dl_model(df_train_scaled, model_conf, horizon, freq, val_size):
@@ -20,16 +19,12 @@ def train_dl_model(df_train_scaled, model_conf, horizon, freq, val_size):
     keys_to_remove = ["input_size", "learning_rate", "max_steps"]
 
     for key in keys_to_remove:
-        model_kwargs_clean.pop(
-            key, None
-        )  # Remove se existir, sem dar erro se não existir
+        model_kwargs_clean.pop(key, None)  # Remove se existir, sem dar erro se não existir
 
     # Transforma "Hybrid_NHITS" em "NHITS" e coloca em maiúsculo
     clean_model_name = model_type.upper().replace("HYBRID_", "")
 
-    logging.info(
-        f"Inicializando {clean_model_name} (Original: {model_type}) com Input={input_size}, Horizon={horizon}"
-    )
+    logging.info(f"Inicializando {clean_model_name} (Original: {model_type}) com Input={input_size}, Horizon={horizon}")
 
     # --- SELEÇÃO DE MODELOS ---
     if clean_model_name == "NBEATS":
@@ -61,9 +56,7 @@ def train_dl_model(df_train_scaled, model_conf, horizon, freq, val_size):
         )
 
     else:
-        raise ValueError(
-            f"Modelo Neural '{clean_model_name}' não implementado em deep_learning.py"
-        )
+        raise ValueError(f"Modelo Neural '{clean_model_name}' não implementado em deep_learning.py")
 
     # Configuração do NeuralForecast
     nf = NeuralForecast(models=[model], freq=freq)
