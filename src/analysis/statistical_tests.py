@@ -1,199 +1,102 @@
+import collections
+import glob
 import logging
 import os
+import re
 
 import matplotlib
+matplotlib.use("Agg")
+import matplotlib.pyplot as plt
+import seaborn as sns
 import numpy as np
 import pandas as pd
 from scipy import stats
 
-matplotlib.use("Agg")
-import glob
-
-import matplotlib.pyplot as plt
-import seaborn as sns
-
-
-def dm_test(actual, pred1, pred2, h=1, criterion="MAE"):
-    """
-    Teste de Diebold-Mariano (Robust version).
-    """
-    e1 = np.array(actual) - np.array(pred1)
-    e2 = np.array(actual) - np.array(pred2)
-    T = len(e1)
-
-    # Critério de Perda
-    if criterion == "MSE":
-        d = (e1) ** 2 - (e2) ** 2
-    elif criterion == "MAE":
-        d = np.abs(e1) - np.abs(e2)
-    elif criterion == "MAPE":
-        safe_actual = np.where(actual == 0, 1e-6, actual)
-        d = (np.abs(e1) / np.abs(safe_actual)) - (np.abs(e2) / np.abs(safe_actual))
-
-    # Proteção: Modelos idênticos
-    if np.allclose(d, 0, atol=1e-8):
-        return 0.0, 1.0  # P=1.0 (Sem diferença)
-
-    d_mean = np.mean(d)
-
-    # Autocovariância
-    gamma0 = np.var(d, ddof=1)
-    sum_gamma = 0
-
-    if h > 1 and T > h:
-        for lag in range(1, h):
-            try:
-                cov = np.cov(d[lag:], d[:-lag])[0, 1]
-                sum_gamma += cov
-            except:
-                pass
-
-    var_d = (gamma0 + 2 * sum_gamma) / T
-
-    if var_d <= 1e-16:
-        return 0.0, 1.0
-
-    dm_stat = d_mean / np.sqrt(var_d)
-
-    # Correção HLN
-    correction = ((T + 1 - 2 * h + (h * (h - 1)) / T) / T) ** 0.5
-    dm_stat_corrected = dm_stat * correction
-
-    p_value = 2 * (1 - stats.t.cdf(np.abs(dm_stat_corrected), df=T - 1))
-
-    if np.isnan(p_value):
-        return 0.0, 1.0
-
-    return dm_stat_corrected, p_value
-
-
-def plot_dm_heatmap(df_results, output_path, dataset_name):
-    """
-    Gera o Heatmap clássico da literatura para testes estatísticos.
-    """
-    if df_results.empty:
-        return
-
-    # Filtra apenas o dataset atual
-    df = df_results[df_results["Dataset"] == dataset_name].copy()
-    if df.empty:
-        return
-
-    # Prepara a matriz: Pivota os dados
-    # Queremos uma matriz onde Linha=Model_A, Coluna=Model_B, Valor=DM_Stat
-    # Se DM_Stat > 0 (e sig), Model_B (Coluna) ganha.
-    # Se DM_Stat < 0 (e sig), Model_A (Linha) ganha.
-
-    pivot_table = df.pivot(index="Model_A", columns="Model_B", values="DM_Statistic")
-    p_values = df.pivot(index="Model_A", columns="Model_B", values="P_Value")
-
-    plt.figure(figsize=(12, 10))
-
-    def annotate_heatmap(val, p):
-        if pd.isna(val) or pd.isna(p):
-            return ""
-        sig = "*" if p < 0.05 else "ns"
-        return f"{val:.2f}\n({sig})"
-
-    # Cria anotações personalizadas
-    annotations = np.vectorize(annotate_heatmap)(pivot_table.values, p_values.values)
-
-    sns.heatmap(
-        pivot_table,
-        annot=annotations,
-        fmt="",
-        cmap="RdBu_r",
-        center=0,
-        linewidths=0.5,
-        cbar_kws={"label": "Estatística DM (Positivo = Coluna Vence)"},
-    )
-
-    plt.title(f"Diebold-Mariano Test Heatmap - {dataset_name}\n(* = p < 0.05)", fontsize=14)
-    plt.tight_layout()
-
-    filename = os.path.join(output_path, f"DM_Heatmap_{dataset_name}.png")
-    plt.savefig(filename)
-    plt.close()
-    logging.info(f"Heatmap DM salvo em: {filename}")
+try:
+    import scikit_posthocs as sp
+    HAS_SP = True
+except ImportError:
+    HAS_SP = False
+    logging.warning("scikit-posthocs não instalado. O CD Diagram exige este pacote. Use: poetry add scikit-posthocs")
 
 
 def run_significance_analysis(main_config, metrics_df=None):
-    """
-    Executa testes e gera visualizações na pasta dedicada.
-    """
-    # --- NOVO: Pasta Dedicada ---
     stats_path = main_config["results_paths"]["statistical"]
     os.makedirs(stats_path, exist_ok=True)
-
-    logging.info(f"--- [STATS] Iniciando DM Test (Saída em: {stats_path}) ---")
+    
+    logging.info(f"--- [STATS] Iniciando Testes de Friedman e Nemenyi (Padrão CD Diagram) ---")
 
     forecasts_path = main_config["results_paths"]["forecasts"]
-    results = []
+    files = glob.glob(os.path.join(forecasts_path, "forecast_*.csv"))
 
-    # (Lógica de carregar métricas igual ao anterior...)
-    if metrics_df is None:
-        files = glob.glob(os.path.join(forecasts_path, "*.csv"))
-        metrics_df = pd.DataFrame({"dataset": [os.path.basename(f).split("_")[1] for f in files]})
+    if not files:
+        logging.warning("Nenhum arquivo de forecast encontrado para análise estatística.")
+        return
 
-    datasets = metrics_df["dataset"].unique()
+    # Agrupamos as análises por Dataset e Horizonte (Rigidez Matemática)
+    groups = collections.defaultdict(list)
+    
+    for f in files:
+        basename = os.path.basename(f).replace("forecast_", "").replace(".csv", "")
+        ds_name = basename.split("_")[0]
+        match = re.search(r'_h(\d+)$', basename)
+        horizon = match.group(1) if match else "unknown"
+        group_key = f"{ds_name}_h{horizon}"
+        groups[group_key].append((basename, f))
 
-    for ds in datasets:
-        ds_files = glob.glob(os.path.join(forecasts_path, f"forecast_{ds}_*.csv"))
-        models_map = {}
-        for f in ds_files:
-            # Ex: forecast_ETTh1_Informer_h96.csv -> Informer_h96
-            # Removemos o prefixo fixo e a extensão
-            clean_name = os.path.basename(f).replace(f"forecast_{ds}_", "").replace(".csv", "")
-            models_map[clean_name] = f
-
-        model_names = list(models_map.keys())
-
-        # Comparação "Todos contra Todos" (Para gerar o Heatmap completo)
-        # Isso é pesado se tiver muitos modelos, mas gera o gráfico mais bonito da literatura
-        for i, mod_a in enumerate(model_names):
-            for j, mod_b in enumerate(model_names):
-                if i >= j:
-                    continue  # Evita duplicidade e auto-comparação
-
-                try:
-                    df_a = pd.read_csv(models_map[mod_a])
-                    df_b = pd.read_csv(models_map[mod_b])
-
-                    merged = pd.merge(df_a, df_b, on=["unique_id", "ds", "y"], suffixes=("_A", "_B"))
-                    if len(merged) > 10:
-                        h = 1
-                        if "_h" in mod_a:
-                            try:
-                                h = int(mod_a.split("_h")[-1])
-                            except:
-                                pass
-
-                        dm, p_val = dm_test(merged["y"], merged["y_hat_B"], merged["y_hat_A"], h=h)
-
-                        results.append(
-                            {
-                                "Dataset": ds,
-                                "Model_A": mod_a,
-                                "Model_B": mod_b,
-                                "DM_Statistic": dm,
-                                "P_Value": p_val,
-                                "Significant": p_val < 0.05,
-                            }
-                        )
-                except Exception:
-                    pass
-
-    if results:
-        df_res = pd.DataFrame(results)
-        # Salva CSV na nova pasta
-        df_res.to_csv(os.path.join(stats_path, "dm_results_full.csv"), index=False)
-
-        # Gera o Gráfico por Dataset
-        for ds in datasets:
+    for group_key, runs in groups.items():
+        model_errors = {}
+        for exec_name, fpath in runs:
             try:
-                plot_dm_heatmap(df_res, stats_path, ds)
+                # O reset_index garante o alinhamento perfeito das linhas sem falhar no merge
+                df = pd.read_csv(fpath).sort_values(["unique_id", "ds"]).reset_index(drop=True)
+                
+                # Limpa o nome para o gráfico ficar bonito
+                display_name = exec_name.replace(f"{group_key.split('_')[0]}_", "")
+                display_name = re.sub(r'_h\d+$', '', display_name).upper()
+                
+                # Para o Friedman, extraímos o Erro Absoluto de cada ponto de tempo
+                model_errors[display_name] = np.abs(df["y"] - df["y_hat"])
             except Exception as e:
-                logging.error(f"Erro ao plotar heatmap para {ds}: {e}")
+                logging.error(f"Erro ao processar {fpath} para estatística: {e}")
 
-    else:
-        logging.warning("Nenhum resultado estatístico gerado.")
+        df_errors = pd.DataFrame(model_errors).dropna()
+
+        # O Teste de Friedman exige no mínimo 3 modelos concorrentes
+        if df_errors.empty or len(df_errors.columns) < 3:
+            logging.info(f"[{group_key}] Modelos insuficientes (< 3) para Friedman. Pulando.")
+            continue
+
+        # 1. Teste Não-Paramétrico de Friedman
+        stat, p_val = stats.friedmanchisquare(*[df_errors[col] for col in df_errors.columns])
+        logging.info(f"[{group_key}] Friedman p-value: {p_val:.4e}")
+
+        # Se p < 0.05, a diferença global não é obra do acaso, e disparamos o Post-hoc
+        if HAS_SP and p_val < 0.05:
+            # 2. Teste Post-Hoc de Nemenyi
+            p_values = sp.posthoc_nemenyi_friedman(df_errors.values)
+            p_values.columns = df_errors.columns
+            p_values.index = df_errors.columns
+            
+            # Ranking médio de cada modelo
+            ranks = df_errors.rank(axis=1).mean()
+            
+            # 3. Desenho do Critical Difference (CD) Diagram
+            height = max(4.0, len(df_errors.columns) * 0.4)
+            plt.figure(figsize=(10, height))
+            
+            try:
+                sp.critical_difference_diagram(ranks, p_values)
+                plt.title(f"Critical Difference Diagram (Nemenyi) - {group_key.upper()}\n(Friedman p-val: {p_val:.4e})")
+                plt.tight_layout()
+                plt.savefig(os.path.join(stats_path, f"CD_Diagram_{group_key}.png"), dpi=150, bbox_inches='tight')
+                plt.close()
+            except AttributeError:
+                # Fallback caso a versão da biblioteca seja muito antiga
+                sns.heatmap(p_values, annot=True, cmap="RdBu_r", vmin=0, vmax=0.1)
+                plt.title(f"Nemenyi Post-hoc P-values - {group_key.upper()}")
+                plt.tight_layout()
+                plt.savefig(os.path.join(stats_path, f"CD_Diagram_{group_key}.png"))
+                plt.close()
+        elif HAS_SP:
+            logging.info(f"[{group_key}] p-value > 0.05. Modelos empatados estatisticamente. Pulando CD Diagram.")

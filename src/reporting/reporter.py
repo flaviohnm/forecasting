@@ -178,14 +178,42 @@ def generate_report(main_config, successful_runs):
 
         f.write("---\n\n")
 
-        # --- SEÇÃO: TESTES ESTATÍSTICOS ---
-        f.write("## 🔬 Análise de Significância Estatística (Diebold-Mariano)\n\n")
-        heatmaps = glob.glob(os.path.join(statistical_path, "DM_Heatmap_*.png"))
+        # --- SEÇÃO: TESTES ESTATÍSTICOS (Grid 2x2 Fixo) ---
+        f.write("## 🔬 Análise de Significância Estatística (Friedman + Nemenyi)\n\n")
+        f.write(
+            "Os Diagramas de Diferença Crítica (CD) conectam com uma barra preta os modelos que NÃO possuem diferença estatística significativa. Quanto mais à direita, melhor o ranking de precisão.\n\n"
+        )
 
-        if heatmaps:
-            for hm in sorted(heatmaps):
-                rel_path = os.path.relpath(hm, start=reports_path)
-                f.write(f"![Heatmap DM]({rel_path})\n\n")
+        cd_diagrams = glob.glob(os.path.join(statistical_path, "CD_Diagram_*.png"))
+
+        if cd_diagrams:
+            grouped_cd = collections.defaultdict(dict)
+            pattern = re.compile(r"^CD_Diagram_(?P<dataset>.+)_h(?P<horizon>\d+)\.png$")
+
+            for cd in sorted(cd_diagrams):
+                basename = os.path.basename(cd)
+                match = pattern.match(basename)
+                if match:
+                    dataset = match.group("dataset")
+                    horizon = int(match.group("horizon"))
+
+                    rel_path = os.path.relpath(cd, start=reports_path)
+                    grouped_cd[dataset][horizon] = rel_path
+
+            for dataset, horizons_dict in grouped_cd.items():
+                f.write(f"### Dataset: {dataset.upper()}\n\n")
+
+                def get_img(h):
+                    return (
+                        f'<img src="{horizons_dict[h]}" width="100%" style="width:100%; max-width:100%; height:auto;">'
+                        if h in horizons_dict
+                        else "<i>Imagem indisponível</i>"
+                    )
+
+                # HTML Compactado em linha única (Grid 2x2)
+                html_grid = f'<table width="100%" style="width:100%; table-layout:fixed; border:none; text-align:center;"><tr><td style="width:50%; border:none; padding:5px; vertical-align:top;"><b>H=96</b><br>{get_img(96)}</td><td style="width:50%; border:none; padding:5px; vertical-align:top;"><b>H=192</b><br>{get_img(192)}</td></tr><tr><td style="width:50%; border:none; padding:5px; vertical-align:top;"><b>H=336</b><br>{get_img(336)}</td><td style="width:50%; border:none; padding:5px; vertical-align:top;"><b>H=720</b><br>{get_img(720)}</td></tr></table>'
+
+                f.write(html_grid + "\n\n<br>\n\n")
 
     logging.info(f"Relatório Markdown salvo com sucesso em: {md_output}")
 
