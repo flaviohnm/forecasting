@@ -27,39 +27,6 @@ from src.models.deep_learning import train_dl_model
 from src.models.statistical import train_stats_model
 
 
-def apply_vmd_to_df(df, K=4):
-    """
-    Aplica Variational Mode Decomposition no DataFrame para evitar vazamento de dados,
-    gerando novos unique_ids para cada modo extraído.
-    """
-    try:
-        from vmdpy import VMD
-    except ImportError:
-        logging.error("Biblioteca 'vmdpy' não encontrada. Instale com: pip install vmdpy")
-        raise
-
-    alpha = 2000  # Bandwidth constraint
-    tau = 0.0  # Noise-tolerance
-    DC = 0  # No DC part imposed
-    init = 1  # Initialize omegas uniformly
-    tol = 1e-7
-
-    y = df["y"].values
-
-    # Extrai os Modos (u)
-    u, u_hat, omega = VMD(y, alpha, tau, K, DC, init, tol)
-
-    dfs = []
-    base_id = df["unique_id"].iloc[0]
-    for i in range(K):
-        df_mode = df.copy()
-        df_mode["unique_id"] = f"{base_id}_mode_{i}"
-        df_mode["y"] = u[i, :]
-        dfs.append(df_mode)
-
-    return pd.concat(dfs, ignore_index=True)
-
-
 def calculate_residuals(base_name, df_original, save_path, horizon):
     model_path_joblib = os.path.join(save_path, f"{base_name}.joblib")
     model_path_neural = os.path.join(save_path, base_name)
@@ -116,21 +83,12 @@ def run(model_conf, dataset_conf, main_config, exec_name):
             model_conf["params"]["model_kwargs"] = {}
         model_conf["params"]["model_kwargs"]["input_size"] = calculated_input
 
-    # 4. Híbrido: Resíduos + VMD Opcional
+    # 4. Híbrido: Resíduos
     if model_conf.get("depends_on"):
         base_model_name = f"{dataset_conf['name']}_{model_conf['depends_on']}_h{horizon}"
         logging.info(f"Modo Híbrido. Calculando resíduos sobre: {base_model_name}")
         try:
-            df_residuals = calculate_residuals(base_model_name, df, save_path, horizon)
-
-            # --- INTEGRAÇÃO DO VMD AQUI ---
-            if model_conf.get("use_vmd", False):
-                k_modes = model_conf.get("vmd_modes", 4)
-                logging.info(f"Aplicando VMD (K={k_modes}) nos resíduos de treino...")
-                df = apply_vmd_to_df(df_residuals, K=k_modes)
-            else:
-                df = df_residuals
-
+            df = calculate_residuals(base_model_name, df, save_path, horizon)
         except Exception as e:
             logging.error(f"Falha ao calcular resíduos: {e}")
             raise e

@@ -2,7 +2,12 @@ import argparse
 import glob
 import logging
 import os
+import random
 import warnings
+
+import numpy as np
+import torch
+from pytorch_lightning import seed_everything
 
 from src.reporting import reporter
 from src.utils.config_loader import load_config
@@ -19,6 +24,30 @@ warnings.filterwarnings("ignore", message=".*The `df` argument of the StatsForec
 # --- NOVO FILTRO: Ignora aviso sobre NIXTLA_ID_AS_COL ---
 warnings.filterwarnings("ignore", message=".*NIXTLA_ID_AS_COL.*")
 # -------------------------------------------------------
+
+
+def set_global_seed(seed=42):
+    """
+    Configura a semente global para garantir a reprodutibilidade
+    em todas as bibliotecas (PyTorch, Numpy, Ray e Python).
+    """
+    # Trava o PyTorch Lightning e o Ray Tune
+    seed_everything(seed, workers=True)
+
+    # Trava as bibliotecas base
+    random.seed(seed)
+    np.random.seed(seed)
+    torch.manual_seed(seed)
+    torch.cuda.manual_seed_all(seed)
+
+    # Garante determinismo em operações de hash do Python
+    os.environ["PYTHONHASHSEED"] = str(seed)
+
+    # Configurações para garantir determinismo em GPU (quando disponível)
+    torch.backends.cudnn.deterministic = True
+    torch.backends.cudnn.benchmark = False
+
+    logging.info(f"Semente global configurada para: {seed}")
 
 
 def setup_logging():
@@ -48,6 +77,9 @@ def scan_existing_results(metrics_path):
 
 def main():
     setup_logging()
+
+    # --- 0. Configurar Reprodutibilidade Matemática ---
+    set_global_seed(42)
 
     # --- 1. Configuração de Argumentos (CLI) ---
     parser = argparse.ArgumentParser(description="Time Series Forecasting Pipeline")

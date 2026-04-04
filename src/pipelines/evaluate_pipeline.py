@@ -25,26 +25,6 @@ from src.data_management.data_loader import load_dataset
 from src.models.utils import predict_wrapper
 
 
-def apply_vmd_to_df(df, K=4):
-    try:
-        from vmdpy import VMD
-    except ImportError:
-        raise ImportError("Instale vmdpy: pip install vmdpy")
-
-    y = df["y"].values
-    u, _, _ = VMD(y, 2000, 0.0, K, 0, 1, 1e-7)
-
-    dfs = []
-    base_id = df["unique_id"].iloc[0]
-    for i in range(K):
-        df_mode = df.copy()
-        df_mode["unique_id"] = f"{base_id}_mode_{i}"
-        df_mode["y"] = u[i, :]
-        dfs.append(df_mode)
-
-    return pd.concat(dfs, ignore_index=True)
-
-
 def get_historical_residuals(base_name, df_hist, save_path, horizon):
     """
     Recupera os fitted_values do modelo base APENAS para a janela de histórico
@@ -119,12 +99,6 @@ def run(main_config, model_conf, dataset_conf, exec_name):
 
         # O modelo híbrido precisa receber RESÍDUOS passados, não os dados originais!
         df_history = get_historical_residuals(base_name, df_history_original, models_path, horizon)
-
-        # Aplica VMD no histórico se configurado
-        if model_conf.get("use_vmd", False):
-            k_modes = model_conf.get("vmd_modes", 4)
-            logging.info(f"Aplicando VMD (K={k_modes}) no histórico de inferência...")
-            df_history = apply_vmd_to_df(df_history, K=k_modes)
     else:
         df_history = df_history_original
 
@@ -141,11 +115,6 @@ def run(main_config, model_conf, dataset_conf, exec_name):
 
     if scaler:
         y_hat_df = scaler.inverse_transform(y_hat_df)
-
-    # --- SOMA DOS MODOS DO VMD ---
-    if model_conf.get("use_vmd", False):
-        logging.info("Agregando previsões dos modos VMD em um único resíduo...")
-        y_hat_df = y_hat_df.groupby("ds", as_index=False)[["y_hat"]].sum()
 
     y_hat_df["unique_id"] = target_id
 
@@ -174,18 +143,46 @@ def run(main_config, model_conf, dataset_conf, exec_name):
     if len(df_test) == 0:
         return
 
+    # ==========================================
+    # --- CÁLCULO DAS 4 MÉTRICAS DE AVALIAÇÃO ---
+    # ==========================================
+
+    # 1. MAPE (Mean Absolute Percentage Error)
     mape = np.mean(np.abs((df_test["y"] - df_test["y_hat"]) / df_test["y"])) * 100
+
+    # 2. MAE (Mean Absolute Error)
+    mae = np.mean(np.abs(df_test["y"] - df_test["y_hat"]))
+
+    # 3. MASE (Mean Absolute Scaled Error)
     y_train = df_full.iloc[:-test_size]["y"].values
     scale = np.mean(np.abs(y_train[1:] - y_train[:-1]))
-    mae = np.mean(np.abs(df_test["y"] - df_test["y_hat"]))
     mase = mae / scale if scale != 0 else np.inf
 
-    logging.info(f"Resultados {exec_name} -> MAPE: {mape:.4f} | MASE: {mase:.4f}")
+    # 4. sMAPE (Symmetric Mean Absolute Percentage Error)
+    denom = np.abs(df_test["y"]) + np.abs(df_test["y_hat"])
+    smape = np.mean((2.0 * np.abs(df_test["y"] - df_test["y_hat"])) / np.where(denom == 0, 1e-6, denom)) * 100
 
-    metrics_df = pd.DataFrame(
-        [{"model": exec_name, "dataset": dataset_conf["name"], "horizon": horizon, "mape": mape, "mase": mase}]
+    logging.info(
+        f"Resultados {exec_name} -> MAE: {mae:.2f} | sMAPE: {smape:.2f}% | MAPE: {mape:.2f}% | MASE: {mase:.4f}"
     )
+
+    # Exportando as 4 métricas para o CSV
+    metrics_df = pd.DataFrame(
+        [
+            {
+                "model": exec_name,
+                "dataset": dataset_conf["name"],
+                "horizon": horizon,
+                "mae": mae,  # Adicionado
+                "smape": smape,  # Adicionado
+                "mape": mape,
+                "mase": mase,
+            }
+        ]
+    )
+
     metrics_df.to_csv(os.path.join(metrics_path, f"metrics_{exec_name}.csv"), index=False)
+
     df_test[["unique_id", "ds", "y", "y_hat"]].to_csv(
         os.path.join(forecasts_path, f"forecast_{exec_name}.csv"), index=False
     )
