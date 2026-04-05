@@ -3,9 +3,11 @@ import glob
 import logging
 import os
 import re
+import shutil
 
 import matplotlib
 import pandas as pd
+import seaborn as sns
 
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
@@ -37,7 +39,7 @@ MODEL_COLORS = {
 
 def parse_model_info(row):
     exec_name = row["model"]
-    ds_name = row["dataset"]
+    ds_name = row.get("dataset", "ETTh1")
     clean_name = exec_name.replace(f"{ds_name}_", "")
     clean_name = re.sub(r"_h\d+$", "", clean_name)
 
@@ -55,6 +57,66 @@ def parse_model_info(row):
     return pd.Series([group, model_display])
 
 
+def generate_pd_plot(main_config, df_full):
+    """
+    Gera o gráfico de barras de Percentage Difference (PD) baseado no artigo de referência.
+    Calcula a melhoria relativa do melhor modelo Híbrido contra a literatura.
+    """
+    plots_path = main_config["results_paths"]["plots"]
+    pd_path = os.path.join(plots_path, "percentage_difference")
+    os.makedirs(pd_path, exist_ok=True)
+
+    try:
+        # 1. Calcula o MAPE médio global de cada modelo (agregando todos os horizontes)
+        df_mean = df_full.groupby(["Grupo", "Modelo"])["mape"].mean().reset_index()
+        df_mean = df_mean.dropna()
+
+        if df_mean.empty:
+            return
+
+        # 2. Identifica o "Modelo Proposto" (O Híbrido com menor MAPE médio)
+        hybrids = df_mean[df_mean["Grupo"] == "Hybrid Methods"]
+        if hybrids.empty:
+            logging.warning("Nenhum modelo híbrido encontrado para gerar o gráfico de PD.")
+            return
+
+        best_hybrid = hybrids.loc[hybrids["mape"].idxmin()]
+        best_hybrid_name = best_hybrid["Modelo"]
+        best_hybrid_mape = best_hybrid["mape"]
+
+        # 3. Isola os modelos da literatura (Bases Estatísticas e Deep Learning Puros)
+        baselines = df_mean[df_mean["Grupo"].isin(["Statistical", "Deep Learning"])].copy()
+        if baselines.empty:
+            return
+
+        # 4. Fórmula de Melhoria Percentual: (Baseline - Proposed) / Baseline * 100
+        baselines["PD"] = ((baselines["mape"] - best_hybrid_mape) / baselines["mape"]) * 100
+        baselines = baselines.sort_values(by="PD", ascending=True)
+
+        # 5. Plotagem do Gráfico (A estética do artigo: barras cinzas ascendentes)
+        plt.figure(figsize=(12, 7))
+        bars = plt.bar(baselines["Modelo"], baselines["PD"], color="#a9a9a9", width=0.65)
+
+        plt.ylabel("PD(%)", fontsize=12)
+        plt.xlabel("Model", fontsize=12)
+        plt.title(
+            f"Percentage Difference (PD) in terms of mean MAPE between\n{best_hybrid_name} and literature models",
+            fontsize=14,
+        )
+
+        plt.xticks(rotation=45, ha="right", fontsize=11)
+        plt.grid(axis="y", linestyle="-", alpha=0.3)
+        plt.tight_layout()
+
+        plot_file = os.path.join(pd_path, "pd_global.png")
+        plt.savefig(plot_file, dpi=150)
+        plt.close()
+        logging.info(f"Gráfico PD gerado com sucesso em: {plot_file}")
+
+    except Exception as e:
+        logging.error(f"Erro ao gerar o gráfico de Percentage Difference: {e}")
+
+
 def generate_report(main_config, successful_runs):
     logging.info("--- [REPORT] Gerando Relatório Markdown ---")
 
@@ -64,11 +126,9 @@ def generate_report(main_config, successful_runs):
     plots_path = main_config["results_paths"]["plots"]
     pd_path = os.path.join(plots_path, "percentage_difference")
 
-    # Garante que as pastas existam
     os.makedirs(pd_path, exist_ok=True)
     os.makedirs(reports_path, exist_ok=True)
 
-    # Lê todos os arquivos CSV existentes na pasta metrics
     all_files = glob.glob(os.path.join(metrics_path, "*.csv"))
     if not all_files:
         logging.warning("Nenhum arquivo de métricas encontrado para gerar o relatório.")
@@ -78,16 +138,20 @@ def generate_report(main_config, successful_runs):
     df_full = pd.concat(df_list, ignore_index=True)
     df_full.to_csv(os.path.join(reports_path, "consolidated_metrics.csv"), index=False)
 
-    # 2. Executar Testes Estatísticos (DM Test)
+    # 1. Executar Testes Estatísticos (DM Test e Friedman)
     if HAS_STATS:
         try:
             run_significance_analysis(main_config, metrics_df=df_full)
         except Exception as e:
             logging.error(f"Erro nos testes estatísticos: {e}")
 
+    # 2. Gerar Gráfico de Percentage Difference (PD)
+    df_full_parsed = df_full.copy()
+    df_full_parsed[["Grupo", "Modelo"]] = df_full_parsed.apply(parse_model_info, axis=1)
+    generate_pd_plot(main_config, df_full_parsed)
+
     # 3. Processar Dados para a Tabela HTML (Matriz de Resultados)
     df_full[["Grupo", "Modelo"]] = df_full.apply(parse_model_info, axis=1)
-
     group_order = ["Statistical", "Deep Learning", "Hybrid Methods", "Other"]
     df_full["Grupo"] = pd.Categorical(df_full["Grupo"], categories=group_order, ordered=True)
 
@@ -105,16 +169,51 @@ def generate_report(main_config, successful_runs):
 
     html_table = pivot_df.to_html(classes="table", justify="center", float_format="%.4f", border=1)
 
-    # ESCRITA DO MARKDOWN COM GRID 2x2 E ESPAÇAMENTO BLINDADO
+    # ESCRITA DO MARKDOWN BLINDADA
     md_output = os.path.join(reports_path, "relatorio_final.md")
     with open(md_output, "w", encoding="utf-8") as f:
         f.write("# Relatório Final de Experimentos\n\n")
         f.write("## 🏆 Matriz de Resultados Abrangente\n\n")
         f.write(html_table)
-
-        # Quebra de linha forte após a tabela principal
         f.write("\n\n<br><br>\n\n")
 
+        # --- SEÇÃO ESTATÍSTICA (INJEÇÃO DO FRIEDMAN E DM) ---
+        f.write("## 🔬 Testes de Significância Estatística\n\n")
+
+        friedman_csv = os.path.join(statistical_path, "friedman_ranks.csv")
+        friedman_txt = os.path.join(statistical_path, "friedman_summary.txt")
+
+        if os.path.exists(friedman_csv) and os.path.exists(friedman_txt):
+            f.write("### Teste Não-Paramétrico de Friedman\n\n")
+            f.write(
+                "Avaliação de superioridade global (MAE) utilizando múltiplos horizontes como blocos experimentais.\n\n"
+            )
+
+            with open(friedman_txt, "r", encoding="utf-8") as txt:
+                lines = txt.readlines()
+                if len(lines) >= 2:
+                    f.write(f"- **Estatística Chi-Square:** `{lines[0].strip()}`\n")
+                    f.write(f"- **P-Value:** `{lines[1].strip()}`\n\n")
+
+            df_ranks = pd.read_csv(friedman_csv)
+            df_ranks[["Grupo", "Modelo"]] = df_ranks.apply(
+                lambda r: parse_model_info(pd.Series({"model": r["Modelo_Core"], "dataset": "ETTh1"})), axis=1
+            )
+            df_ranks = df_ranks[["Grupo", "Modelo", "Ranking Médio"]]
+
+            f.write("**Tabela de Ranking Médio (Menor é Melhor):**\n\n")
+            f.write(df_ranks.to_html(classes="table", index=False, border=1, justify="center", float_format="%.2f"))
+            f.write("\n\n<br><br>\n\n")
+
+        dm_csv = os.path.join(statistical_path, "dm_test_results.csv")
+        if os.path.exists(dm_csv):
+            f.write("### Teste de Diebold-Mariano (Par a Par)\n\n")
+            df_dm = pd.read_csv(dm_csv)
+            f.write(df_dm.to_html(classes="table", index=False, border=1, justify="center"))
+            f.write("\n\n<br><br>\n\n")
+        f.write("---\n\n")
+
+        # --- SEÇÃO FAMÍLIAS (GRID 2x2) ---
         f.write("## 📈 Dinâmica de Previsão por Famílias\n\n")
         family_path = os.path.join(plots_path, "families")
         family_plots = glob.glob(os.path.join(family_path, "*.png"))
@@ -122,7 +221,6 @@ def generate_report(main_config, successful_runs):
         if not family_plots:
             f.write("> *Aviso: Nenhum gráfico de família foi encontrado.*\n\n")
         else:
-            # Agrupar gráficos por família usando regex
             families = collections.defaultdict(dict)
             pattern = re.compile(r"family_(.+?)_(.+?)_(.+?)_h(\d+)\.png")
 
@@ -132,10 +230,8 @@ def generate_report(main_config, successful_runs):
                 if match:
                     dataset, base, dl, horizon = match.groups()
                     key = f"Comparativo: {base.upper()} + {dl.upper()}"
-                    # Usa caminho relativo
                     families[key][int(horizon)] = os.path.relpath(plot, start=reports_path)
 
-            # Montar a tabela HTML (Grid 2x2) para cada família
             for family_name, horizons_dict in sorted(families.items()):
                 f.write(f"### {family_name}\n\n")
 
@@ -144,7 +240,6 @@ def generate_report(main_config, successful_runs):
                 img_336 = horizons_dict.get(336, "")
                 img_720 = horizons_dict.get(720, "")
 
-                # Adicionando \n\n explícito dentro da string formatada após a tag <br>
                 grid_html = f"""
 <table style="width:100%; text-align:center; border:none;">
   <tr>
@@ -161,8 +256,12 @@ def generate_report(main_config, successful_runs):
 """
                 f.write(grid_html)
 
-        # Quebra de linha forte ANTES da separação da próxima seção
+        # --- SEÇÃO PERCENTAGE DIFFERENCE (NOVO GRÁFICO!) ---
         f.write("\n\n---\n\n## 🚀 Percentage Difference (PD) Global\n\n")
+        f.write(
+            "Este gráfico apresenta a Diferença Percentual (PD) em termos do erro médio (MAPE) entre o melhor modelo Híbrido proposto e os modelos da literatura, agregando todos os horizontes de previsão.\n\n"
+        )
+
         pd_plots = glob.glob(os.path.join(pd_path, "*.png"))
         if not pd_plots:
             f.write("> *Aviso: Nenhum gráfico PD encontrado.*\n\n")
