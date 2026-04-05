@@ -14,7 +14,8 @@ import matplotlib.pyplot as plt
 
 # Importa o teste estatístico
 try:
-    from src.analysis.statistical_tests import run_significance_analysis
+    from src.evaluation.statistical_tests import run_significance_analysis
+
     HAS_STATS = True
 except ImportError:
     logging.warning("Módulo 'src.analysis.statistical_tests' não encontrado. Testes estatísticos serão pulados.")
@@ -35,18 +36,20 @@ MODEL_COLORS = {
     "AutoARIMA": "#bcbd22",
 }
 
+
 def get_model_color(model_name):
     for key, color in MODEL_COLORS.items():
         if key.upper() in model_name.upper():
             return color
     return "#333333"
 
+
 def parse_model_info(row):
     exec_name = row["model"]
     ds_name = row["dataset"]
     clean_name = exec_name.replace(f"{ds_name}_", "")
-    clean_name = re.sub(r'_h\d+$', '', clean_name)
-    
+    clean_name = re.sub(r"_h\d+$", "", clean_name)
+
     if "hybrid_" in clean_name:
         group = "Hybrid Methods"
         parts = clean_name.replace("hybrid_", "").split("_on_")
@@ -64,7 +67,7 @@ def parse_model_info(row):
     else:
         group = "Other"
         model_display = clean_name.upper()
-        
+
     return pd.Series([group, model_display])
 
 
@@ -76,7 +79,7 @@ def generate_report(main_config, successful_runs):
     statistical_path = main_config["results_paths"]["statistical"]
     plots_path = main_config["results_paths"]["plots"]
     pd_path = os.path.join(plots_path, "percentage_difference")
-    
+
     # AUTOLIMPEZA: Evita fantasmas de gráficos gerados em execuções anteriores
     if os.path.exists(pd_path):
         shutil.rmtree(pd_path)
@@ -106,9 +109,7 @@ def generate_report(main_config, successful_runs):
     df_full["Grupo"] = pd.Categorical(df_full["Grupo"], categories=group_order, ordered=True)
 
     pivot_df = df_full.pivot_table(
-        index=["Grupo", "Modelo"],
-        columns="horizon",
-        values=["mae", "mase", "mape", "smape"]
+        index=["Grupo", "Modelo"], columns="horizon", values=["mae", "mase", "mape", "smape"]
     )
 
     metrics_order = ["mae", "mase", "mape", "smape"]
@@ -123,33 +124,43 @@ def generate_report(main_config, successful_runs):
 
     # --- LÓGICA DE PERCENTAGE DIFFERENCE (PD) AGREGADA (FIG 13) ---
     logging.info("Calculando PD agregado para a Fig 13 do artigo...")
-    
+
     # O observed=True impede o Pandas de inventar linhas NaN que esvaziavam o gráfico
-    df_mean_mape = df_full.dropna(subset=["mape"]).groupby(["dataset", "Grupo", "Modelo"], observed=True)["mape"].mean().reset_index()
+    df_mean_mape = (
+        df_full.dropna(subset=["mape"])
+        .groupby(["dataset", "Grupo", "Modelo"], observed=True)["mape"]
+        .mean()
+        .reset_index()
+    )
     hybrid_models = df_mean_mape[df_mean_mape["Grupo"] == "Hybrid Methods"]
-    
+
     for _, hyb_row in hybrid_models.iterrows():
         ds = hyb_row["dataset"]
         hyb_name = hyb_row["Modelo"]
         hyb_mape = hyb_row["mape"]
-        
-        df_benchmarks = df_mean_mape[(df_mean_mape["dataset"] == ds) & (df_mean_mape["Grupo"] != "Hybrid Methods")].copy()
+
+        df_benchmarks = df_mean_mape[
+            (df_mean_mape["dataset"] == ds) & (df_mean_mape["Grupo"] != "Hybrid Methods")
+        ].copy()
         df_benchmarks = df_benchmarks.dropna(subset=["mape"])
-        
+
         if not df_benchmarks.empty:
             df_benchmarks["PD"] = 100 * ((df_benchmarks["mape"] - hyb_mape) / df_benchmarks["mape"])
             df_benchmarks = df_benchmarks.sort_values(by="PD", ascending=True)
-            
+
             plt.figure(figsize=(10, 6))
             sns.barplot(data=df_benchmarks, x="Modelo", y="PD", color="#a9a9a9")
-            plt.title(f"Percentage Difference (PD) in terms of MAPE between the {hyb_name}\nand other literature models regarding all horizons", pad=15)
+            plt.title(
+                f"Percentage Difference (PD) in terms of MAPE between the {hyb_name}\nand other literature models regarding all horizons",
+                pad=15,
+            )
             plt.ylabel("PD (%)")
             plt.xlabel("Model")
             plt.axhline(0, color="black", linewidth=1.2)
             plt.xticks(rotation=45, ha="right")
-            plt.grid(axis='y', linestyle='--', alpha=0.7)
+            plt.grid(axis="y", linestyle="--", alpha=0.7)
             plt.tight_layout()
-            
+
             safe_name = hyb_name.replace(" + ", "_").replace(" ", "")
             plt.savefig(os.path.join(pd_path, f"PD_Fig13_{ds}_{safe_name}.png"), dpi=150)
             plt.close()
@@ -168,7 +179,7 @@ def generate_report(main_config, successful_runs):
         if family_plots:
             grouped_plots = collections.defaultdict(dict)
             pattern = re.compile(r"^family_(?P<dataset>.+)_(?P<base>[^_]+)_(?P<dl>[^_]+)_h(?P<horizon>\d+)\.png$")
-            
+
             for fp in sorted(family_plots):
                 basename = os.path.basename(fp)
                 match = pattern.match(basename)
@@ -182,18 +193,25 @@ def generate_report(main_config, successful_runs):
 
             for (dataset, base, dl), horizons_dict in grouped_plots.items():
                 f.write(f"### Grupo: {base.upper()} x {dl.upper()} x Híbrido ({dataset})\n\n")
+
                 def get_img(h):
-                    return f'<img src="{horizons_dict[h]}" width="100%" style="width:100%; max-width:100%; height:auto;">' if h in horizons_dict else "<span style='color:gray;'><i>Não executado</i></span>"
+                    return (
+                        f'<img src="{horizons_dict[h]}" width="100%" style="width:100%; max-width:100%; height:auto;">'
+                        if h in horizons_dict
+                        else "<span style='color:gray;'><i>Não executado</i></span>"
+                    )
 
                 html_grid = f'<table width="100%" style="width:100%; table-layout:fixed; border:none; text-align:center;"><tr><td style="width:50%; border:none; padding:5px; vertical-align:top;"><b>H=96</b><br>{get_img(96)}</td><td style="width:50%; border:none; padding:5px; vertical-align:top;"><b>H=192</b><br>{get_img(192)}</td></tr><tr><td style="width:50%; border:none; padding:5px; vertical-align:top;"><b>H=336</b><br>{get_img(336)}</td><td style="width:50%; border:none; padding:5px; vertical-align:top;"><b>H=720</b><br>{get_img(720)}</td></tr></table>'
                 f.write(html_grid + "\n\n<br>\n\n")
-        
+
         f.write("---\n\n")
 
         # --- SEÇÃO: PERCENTAGE DIFFERENCE (PD) (Apenas as imagens, sem tabelas) ---
         f.write("## 🚀 Percentage Difference (PD) Global\n\n")
-        f.write("Este gráfico apresenta a Diferença Percentual (PD) em termos de MAPE entre o modelo Híbrido proposto e os modelos da literatura, **agregando todos os horizontes de previsão**.\n\n")
-        
+        f.write(
+            "Este gráfico apresenta a Diferença Percentual (PD) em termos de MAPE entre o modelo Híbrido proposto e os modelos da literatura, **agregando todos os horizontes de previsão**.\n\n"
+        )
+
         pd_plots = glob.glob(os.path.join(pd_path, "PD_Fig13_*.png"))
         if pd_plots:
             for pp in sorted(pd_plots):
@@ -204,8 +222,10 @@ def generate_report(main_config, successful_runs):
 
         # --- SEÇÃO: TESTES ESTATÍSTICOS ---
         f.write("## 🔬 Teste Estatístico de Diebold-Mariano (DM)\n\n")
-        f.write("A tabela abaixo apresenta a estatística DM e o p-Value comparando o modelo Híbrido com os modelos da literatura para todos os horizontes agregados. Um *p-Value < 0.05* indica diferença estatística significativa a favor do modelo proposto.\n\n")
-        
+        f.write(
+            "A tabela abaixo apresenta a estatística DM e o p-Value comparando o modelo Híbrido com os modelos da literatura para todos os horizontes agregados. Um *p-Value < 0.05* indica diferença estatística significativa a favor do modelo proposto.\n\n"
+        )
+
         dm_csv = os.path.join(statistical_path, "dm_test_results.csv")
         if os.path.exists(dm_csv):
             df_dm = pd.read_csv(dm_csv)
@@ -261,19 +281,57 @@ def generate_plots(main_config, successful_runs):
 
                 plt.figure(figsize=(14, 7))
 
-                plt.plot(df_hybrid["ds"].tail(zoom_size), df_hybrid["y"].tail(zoom_size), label="Real (Ground Truth)", color="black", linewidth=2.5, alpha=0.5, zorder=1)
-                plt.plot(df_base["ds"].tail(zoom_size), df_base["y_hat"].tail(zoom_size), label=f"Estatístico ({base_model.upper()})", color="#1f77b4", linewidth=1.5, alpha=0.8, zorder=2, linestyle="--")
-                plt.plot(df_dl["ds"].tail(zoom_size), df_dl["y_hat"].tail(zoom_size), label=f"Neural ({dl_model.upper()})", color="#ff7f0e", linewidth=1.5, alpha=0.8, zorder=3, linestyle="-.")
-                plt.plot(df_hybrid["ds"].tail(zoom_size), df_hybrid["y_hat"].tail(zoom_size), label=f"Híbrido ({dl_model.upper()} + {base_model.upper()})", color="#d62728", linewidth=2.5, alpha=1.0, zorder=4)
+                plt.plot(
+                    df_hybrid["ds"].tail(zoom_size),
+                    df_hybrid["y"].tail(zoom_size),
+                    label="Real (Ground Truth)",
+                    color="black",
+                    linewidth=2.5,
+                    alpha=0.5,
+                    zorder=1,
+                )
+                plt.plot(
+                    df_base["ds"].tail(zoom_size),
+                    df_base["y_hat"].tail(zoom_size),
+                    label=f"Estatístico ({base_model.upper()})",
+                    color="#1f77b4",
+                    linewidth=1.5,
+                    alpha=0.8,
+                    zorder=2,
+                    linestyle="--",
+                )
+                plt.plot(
+                    df_dl["ds"].tail(zoom_size),
+                    df_dl["y_hat"].tail(zoom_size),
+                    label=f"Neural ({dl_model.upper()})",
+                    color="#ff7f0e",
+                    linewidth=1.5,
+                    alpha=0.8,
+                    zorder=3,
+                    linestyle="-.",
+                )
+                plt.plot(
+                    df_hybrid["ds"].tail(zoom_size),
+                    df_hybrid["y_hat"].tail(zoom_size),
+                    label=f"Híbrido ({dl_model.upper()} + {base_model.upper()})",
+                    color="#d62728",
+                    linewidth=2.5,
+                    alpha=1.0,
+                    zorder=4,
+                )
 
-                plt.title(f"Comparativo de Desempenho: {base_model.upper()} vs {dl_model.upper()} vs Híbrido | Dataset: {dataset} | Horizonte: {horizon}")
+                plt.title(
+                    f"Comparativo de Desempenho: {base_model.upper()} vs {dl_model.upper()} vs Híbrido | Dataset: {dataset} | Horizonte: {horizon}"
+                )
                 plt.xlabel("Tempo")
                 plt.ylabel("Valores")
                 plt.legend(bbox_to_anchor=(1.01, 1), loc="upper left")
                 plt.grid(True, which="both", linestyle="--", linewidth=0.5, alpha=0.7)
                 plt.tight_layout()
 
-                plt.savefig(os.path.join(family_path, f"family_{dataset}_{base_model}_{dl_model}_h{horizon}.png"), dpi=150)
+                plt.savefig(
+                    os.path.join(family_path, f"family_{dataset}_{base_model}_{dl_model}_h{horizon}.png"), dpi=150
+                )
                 plt.close()
 
     logging.info(f"Relatórios concluídos com sucesso.")

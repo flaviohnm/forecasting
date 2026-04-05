@@ -9,7 +9,7 @@ import numpy as np
 import torch
 from pytorch_lightning import seed_everything
 
-from src.reporting import reporter
+from src.evaluation import reporter
 from src.utils.config_loader import load_config
 from src.utils.experiment_manager import run_custom_pipeline
 
